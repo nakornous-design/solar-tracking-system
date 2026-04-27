@@ -1,0 +1,744 @@
+<script>
+  const App = (() => {
+    const state = {
+      currentUser: null,
+      currentView: 'dashboard',
+      currentProjectId: null,
+      menu: []
+    };
+
+    function init() {
+      bindStaticEvents();
+      bootstrap();
+    }
+
+    function bindStaticEvents() {
+      const btnLogin = document.getElementById('btnLogin');
+      const btnLogout = document.getElementById('btnLogout');
+      const btnRefresh = document.getElementById('btnRefresh');
+      const btnSearchProjects = document.getElementById('btnSearchProjects');
+      const btnClearProjectFilters = document.getElementById('btnClearProjectFilters');
+
+      if (btnLogin) btnLogin.addEventListener('click', handleLogin);
+      if (btnLogout) btnLogout.addEventListener('click', handleLogout);
+      if (btnRefresh) btnRefresh.addEventListener('click', refreshCurrentView);
+      if (btnSearchProjects) btnSearchProjects.addEventListener('click', loadProjects);
+      if (btnClearProjectFilters) btnClearProjectFilters.addEventListener('click', clearProjectFilters);
+
+      const loginUserId = document.getElementById('loginUserId');
+      if (loginUserId) {
+        loginUserId.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') handleLogin();
+        });
+      }
+    }
+
+    function bootstrap() {
+      if (!(google && google.script && google.script.run && google.script.run.apiGetAppBootstrap)) {
+        showLoginShell();
+        showLoginMessage('ไม่พบ apiGetAppBootstrap');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success) {
+            showLoginShell();
+            showLoginMessage((res && res.message) || 'Bootstrap failed');
+            return;
+          }
+
+          const data = res.data || {};
+          state.currentUser = data.currentUser || null;
+          state.menu = data.menu || [
+            { id: 'dashboard', label: 'Dashboard' },
+            { id: 'projects', label: 'Projects' },
+            { id: 'documents', label: 'Documents' },
+            { id: 'billing', label: 'Billing & Payment' },
+            { id: 'stageMonitor', label: 'Stage Monitor' },
+            { id: 'settings', label: 'Settings' }
+          ];
+
+          renderSidebar();
+          renderCurrentUser();
+
+          if (state.currentUser) {
+            showAppShell();
+            goToView('dashboard');
+          } else {
+            showLoginShell();
+            hideLoginMessage();
+          }
+        })
+        .withFailureHandler(function(err) {
+          console.error(err);
+          showLoginShell();
+          showLoginMessage((err && err.message) ? err.message : 'Bootstrap error');
+        })
+        .apiGetAppBootstrap();
+    }
+
+    function renderSidebar() {
+      const nav = document.getElementById('sidebarNav');
+      if (!nav) return;
+
+      nav.innerHTML = state.menu.map(function(item) {
+        return `
+          <button class="nav-btn ${item.id === state.currentView ? 'active' : ''}" data-view="${item.id}">
+            ${item.label}
+          </button>
+        `;
+      }).join('');
+
+      nav.querySelectorAll('.nav-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          goToView(btn.dataset.view);
+        });
+      });
+    }
+
+    function renderCurrentUser() {
+      const u = state.currentUser || {};
+      setText('sidebarUserName', u.FULL_NAME || u.USER_ID || '-');
+      setText('sidebarUserRole', u.ROLE_CODE || u.DEFAULT_ROLE_CODE || '-');
+
+      const avatar = document.getElementById('sidebarUserAvatar');
+      if (avatar) avatar.textContent = String(u.FULL_NAME || u.USER_ID || 'A').charAt(0).toUpperCase();
+    }
+
+    function showAppShell() {
+      const loginShell = document.getElementById('loginShell');
+      const appShell = document.getElementById('appShell');
+      if (loginShell) loginShell.classList.add('hidden');
+      if (appShell) appShell.classList.remove('hidden');
+    }
+
+    function showLoginShell() {
+      const appShell = document.getElementById('appShell');
+      const loginShell = document.getElementById('loginShell');
+      if (appShell) appShell.classList.add('hidden');
+      if (loginShell) loginShell.classList.remove('hidden');
+    }
+
+    function handleLogin() {
+      const userId = getValue('loginUserId');
+
+      if (!userId) {
+        showLoginMessage('กรุณากรอก User ID');
+        return;
+      }
+
+      if (!(google && google.script && google.script.run && google.script.run.apiLogin)) {
+        showLoginMessage('ไม่พบ apiLogin');
+        return;
+      }
+
+      showLoginMessage('กำลังเข้าสู่ระบบ...');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success) {
+            showLoginMessage((res && res.message) || 'Login failed');
+            return;
+          }
+
+          hideLoginMessage();
+          state.currentUser = res.data || {};
+          renderCurrentUser();
+          showAppShell();
+          goToView('dashboard');
+        })
+        .withFailureHandler(function(err) {
+          console.error(err);
+          showLoginMessage((err && err.message) ? err.message : 'Login error');
+        })
+        .apiLogin({ USER_ID: userId });
+    }
+
+    function handleLogout() {
+      state.currentUser = null;
+      state.currentProjectId = null;
+      showLoginShell();
+      hideMessage();
+    }
+
+    function goToView(viewId) {
+      state.currentView = viewId;
+
+      document.querySelectorAll('.view-section').forEach(function(el) {
+        el.classList.add('hidden');
+      });
+
+      const target = document.getElementById('view-' + viewId);
+      if (target) target.classList.remove('hidden');
+
+      document.querySelectorAll('.nav-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.view === viewId);
+      });
+
+      setPageMeta(viewId);
+
+      if (viewId === 'dashboard') loadDashboard();
+      if (viewId === 'projects') loadProjects();
+    }
+
+    function setPageMeta(viewId) {
+      const map = {
+        dashboard: ['Dashboard', 'Solar Project Tracking MVP'],
+        projects: ['Projects', 'Project list / search / progress tracking'],
+        projectDetail: ['Project Detail', 'Current stage / milestone / timeline'],
+        documents: ['Documents', 'Document Center and verification'],
+        billing: ['Billing & Payment', 'Contractor billing and payment tracking'],
+        stageMonitor: ['Stage Monitor', 'Monitor stuck projects by stage and SLA'],
+        settings: ['Settings', 'Admin / master configuration']
+      };
+
+      const pair = map[viewId] || ['Solar Project Tracking', ''];
+      setText('pageTitle', pair[0]);
+      setText('pageSubtitle', pair[1]);
+    }
+
+    function refreshCurrentView() {
+      if (state.currentView === 'dashboard') loadDashboard();
+      if (state.currentView === 'projects') loadProjects();
+      if (state.currentView === 'projectDetail' && state.currentProjectId) {
+        loadProjectDetail(state.currentProjectId);
+      }
+    }
+
+    function loadDashboard() {
+      if (!(google && google.script && google.script.run && google.script.run.apiGetDashboardSummary)) return;
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success) {
+            showMessage((res && res.message) || 'Dashboard load failed');
+            return;
+          }
+          renderDashboard(res.data || {});
+        })
+        .withFailureHandler(function(err) {
+          console.error(err);
+          showMessage((err && err.message) ? err.message : 'Dashboard error');
+        })
+        .apiGetDashboardSummary({});
+    }
+
+    function renderDashboard(data) {
+      setText('kpiTotalProjects', safeNum(data.totalProjects || data.projects || 0));
+      setText('kpiReadyInstall', safeNum(data.readyForInstall || 0));
+      setText('kpiBillingPending', safeNum(data.billingPending || 0));
+      setText('kpiContractorPaid', safeNum(data.contractorPaid || 0));
+      setText('kpiOverdue', safeNum(data.overdue || 0));
+
+      const stageBox = document.getElementById('dashboardStageSummary');
+      if (stageBox) {
+        const stageItems = [
+          ['Lead', data.leads || 0],
+          ['Survey', data.survey || 0],
+          ['TSSR', data.tssr || 0],
+          ['Install', data.installing || data.install || 0],
+          ['Billing', data.billingPending || 0],
+          ['Payment', data.contractorPaid || 0]
+        ];
+
+        stageBox.innerHTML = stageItems.map(function(item) {
+          return `<span class="stage-chip">${item[0]} ${safeNum(item[1])}</span>`;
+        }).join('');
+      }
+
+      const alertBox = document.getElementById('dashboardAlerts');
+      if (alertBox) {
+        alertBox.innerHTML = `
+          <div class="list-line">Overdue: <strong>${safeNum(data.overdue || 0)}</strong></div>
+          <div class="list-line">Billing Pending: <strong>${safeNum(data.billingPending || 0)}</strong></div>
+          <div class="list-line">Contractor Paid: <strong>${safeNum(data.contractorPaid || 0)}</strong></div>
+        `;
+      }
+
+      const body = document.getElementById('dashboardRecentProjectsBody');
+      if (body) {
+        const recent = Array.isArray(data.recentProjects) ? data.recentProjects : [];
+        if (!recent.length) {
+          body.innerHTML = `<tr><td colspan="7" class="muted">No recent projects</td></tr>`;
+        } else {
+          body.innerHTML = recent.slice(0, 8).map(function(r) {
+            return `
+              <tr>
+                <td>${esc(r.PROJECT_ID)}</td>
+                <td>${esc(r.PROJECT_NAME)}</td>
+                <td>${esc(r.PAYMENT_TYPE)}</td>
+                <td>${esc(r.CURRENT_STAGE_CODE)}</td>
+                <td>${statusBadge(r.CURRENT_STATUS_CODE)}</td>
+                <td>${esc(r.CURRENT_OWNER_ID || r.CURRENT_OWNER_ROLE || '-')}</td>
+                <td>${progressCell(r.OVERALL_PROGRESS_PCT || 0)}</td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      hideMessage();
+    }
+
+    function loadProjects() {
+      if (!(google && google.script && google.script.run && google.script.run.apiListProjects)) return;
+
+      const filters = {
+        PROJECT_ID: getValue('filterProjectId'),
+        KEYWORD: getValue('filterKeyword'),
+        PAYMENT_TYPE: getValue('filterPaymentType'),
+        CURRENT_STAGE_CODE: getValue('filterStageCode'),
+        CURRENT_STATUS_CODE: getValue('filterStatusCode')
+      };
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success) {
+            showMessage((res && res.message) || 'Project list load failed');
+            return;
+          }
+          renderProjects(res.data || []);
+        })
+        .withFailureHandler(function(err) {
+          console.error(err);
+          showMessage((err && err.message) ? err.message : 'Project list error');
+        })
+        .apiListProjects(filters);
+    }
+
+    function renderProjects(rows) {
+      const body = document.getElementById('projectListBody');
+      if (!body) return;
+
+      if (!Array.isArray(rows) || !rows.length) {
+        body.innerHTML = `<tr><td colspan="9" class="muted">ไม่พบข้อมูล</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = rows.map(function(r) {
+        return `
+          <tr>
+            <td>${esc(r.PROJECT_ID)}</td>
+            <td>${esc(r.PROJECT_NAME)}</td>
+            <td>${esc(r.PAYMENT_TYPE || '-')}</td>
+            <td>${esc(r.CURRENT_STAGE_CODE || '-')}</td>
+            <td>${statusBadge(r.CURRENT_STATUS_CODE)}</td>
+            <td>${esc(r.CURRENT_OWNER_ID || r.CURRENT_OWNER_ROLE || '-')}</td>
+            <td>${progressCell(r.OVERALL_PROGRESS_PCT || 0)}</td>
+            <td>${riskBadge(r.RISK_FLAG)}</td>
+            <td><button class="btn btn-secondary" onclick="App.openProject('${escAttr(r.PROJECT_ID)}')">Open</button></td>
+          </tr>
+        `;
+      }).join('');
+
+      hideMessage();
+    }
+
+    function openProject(projectId) {
+      loadProjectDetail(projectId);
+    }
+
+    function loadProjectDetail(projectId) {
+      if (!projectId) {
+        showMessage('ไม่พบ Project ID');
+        return;
+      }
+
+      state.currentProjectId = projectId;
+      goToView('projectDetail');
+
+      if (!(google && google.script && google.script.run && google.script.run.apiGetProjectDetail)) {
+        showMessage('ไม่พบ apiGetProjectDetail');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success || !res.data) {
+            showMessage((res && res.message) || 'Project detail load failed');
+            return;
+          }
+          renderProjectDetail(res.data);
+        })
+        .withFailureHandler(function(err) {
+          console.error(err);
+          showMessage((err && err.message) ? err.message : 'Project detail error');
+        })
+        .apiGetProjectDetail(projectId);
+
+      if (google && google.script && google.script.run && google.script.run.apiGetProjectTimeline) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            renderProjectTimeline((res && res.success && res.data) ? res.data : []);
+          })
+          .withFailureHandler(function(err) {
+            console.error(err);
+            renderProjectTimeline([]);
+          })
+          .apiGetProjectTimeline(projectId);
+      }
+
+      if (google && google.script && google.script.run && google.script.run.apiGetProjectDocuments) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            renderProjectDocuments((res && res.success && res.data) ? res.data : []);
+          })
+          .withFailureHandler(function(err) {
+            console.error(err);
+            renderProjectDocuments([]);
+          })
+          .apiGetProjectDocuments(projectId);
+      }
+
+      if (google && google.script && google.script.run && google.script.run.apiGetAvailableTransitions) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            renderTransitionActions((res && res.success && res.data) ? res.data : []);
+          })
+          .withFailureHandler(function(err) {
+            console.error(err);
+            renderTransitionActions([]);
+          })
+          .apiGetAvailableTransitions(projectId);
+      }
+    }
+
+    function renderProjectDetail(project) {
+      setText('detailProjectTitle', project.PROJECT_NAME || 'Project Detail');
+      setText('detailProjectSubtitle', project.PROJECT_ID || '-');
+      setText('detailPaymentType', project.PAYMENT_TYPE || '-');
+      setText('detailOwner', project.CURRENT_OWNER_ID || project.CURRENT_OWNER_ROLE || '-');
+
+      const pct = Math.max(0, Math.min(100, Number(project.OVERALL_PROGRESS_PCT || 0)));
+      setText('detailProgressText', pct + '%');
+
+      const fill = document.getElementById('detailProgressFill');
+      if (fill) fill.style.width = pct + '%';
+
+      setText('detailCurrentStage', project.CURRENT_STAGE_CODE || '-');
+      setHtml('detailCurrentStatus', statusBadge(project.CURRENT_STATUS_CODE));
+
+      setText('detailCurrentOwner', project.CURRENT_OWNER_ID || project.CURRENT_OWNER_ROLE || '-');
+      setText('detailNextReviewDate', project.NEXT_REVIEW_DATE || '-');
+      setText('detailNextAction', project.NEXT_ACTION || '-');
+
+      setText('sumProjectId', project.PROJECT_ID || '-');
+      setText('sumProjectName', project.PROJECT_NAME || '-');
+      setText('sumProcessCode', project.PROCESS_CODE || '-');
+      setText('sumPaymentType', project.PAYMENT_TYPE || '-');
+      setText('sumCurrentStage', project.CURRENT_STAGE_CODE || '-');
+      setHtml('sumCurrentStatus', statusBadge(project.CURRENT_STATUS_CODE));
+      setText('sumCurrentOwner', project.CURRENT_OWNER_ID || project.CURRENT_OWNER_ROLE || '-');
+      setText('sumRisk', String(project.RISK_FLAG || '').toUpperCase() === 'Y' ? 'RISK' : 'OK');
+      setText('sumNextAction', project.NEXT_ACTION || '-');
+      setText('sumNextReviewDate', project.NEXT_REVIEW_DATE || '-');
+
+      setText('trackHandoverSigned', project.HANDOVER_SIGNED_AT || '-');
+      setText('trackBillingSubmitted', project.BILLING_SUBMITTED_AT || '-');
+      setText('trackEngineerApproved', project.ENGINEER_APPROVED_AT || '-');
+      setText('trackPaymentSubmitted', project.PAYMENT_SUBMITTED_AT || '-');
+      setText('trackApprovedForPayment', project.APPROVED_FOR_PAYMENT_AT || '-');
+      setText('trackPaidDate', project.PAID_AT || '-');
+
+      renderMilestone(project.CURRENT_STAGE_CODE || '');
+
+      const effective = document.getElementById('transitionEffectiveAt');
+      if (effective && !effective.value) {
+        effective.value = currentDateTimeString();
+      }
+    }
+
+    function renderMilestone(currentStageCode) {
+      const order = [
+        ['LEAD', 'Lead'],
+        ['SURVEY', 'Survey'],
+        ['TSSR', 'TSSR'],
+        ['QUOTATION', 'Quotation'],
+        ['DECISION', 'Decision'],
+        ['READY_FOR_INSTALL', 'Ready Install'],
+        ['INSTALL', 'Install'],
+        ['HANDOVER', 'Handover'],
+        ['CONTRACTOR_BILLING', 'Billing'],
+        ['CONTRACTOR_PAYMENT', 'Payment'],
+        ['PROJECT_CLOSE', 'Close']
+      ];
+
+      const wrap = document.getElementById('detailMilestone');
+      if (!wrap) return;
+
+      const idx = order.findIndex(function(x) { return x[0] === currentStageCode; });
+
+      wrap.innerHTML = order.map(function(item, i) {
+        const cls = i < idx ? 'done' : i === idx ? 'current' : 'future';
+        const dotText = i < idx ? '✓' : (i + 1);
+
+        return `
+          <div class="milestone-step ${cls}">
+            <div class="milestone-dot">${dotText}</div>
+            <div class="milestone-title">${item[1]}</div>
+            <div class="milestone-sub">${i === idx ? 'Current' : ''}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderProjectTimeline(rows) {
+      const box = document.getElementById('detailTimeline');
+      if (!box) return;
+
+      if (!Array.isArray(rows) || !rows.length) {
+        box.innerHTML = `<div class="muted">No timeline</div>`;
+        return;
+      }
+
+      box.innerHTML = rows.map(function(r) {
+        return `
+          <div class="timeline-item">
+            <div class="timeline-top">
+              <div class="timeline-stage">${esc(r.STAGE_CODE || '-')}</div>
+              ${statusBadge(r.STATUS_CODE)}
+            </div>
+            <div class="timeline-meta">
+              <div>Effective: ${esc(r.EFFECTIVE_AT || '-')}</div>
+              <div>Owner: ${esc(r.OWNER_ID || '-')}</div>
+              <div>Comment: ${esc(r.COMMENT_TEXT || '-')}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderProjectDocuments(rows) {
+      const box = document.getElementById('detailDocumentSummary');
+      if (!box) return;
+
+      if (!Array.isArray(rows) || !rows.length) {
+        box.innerHTML = `<div class="muted">No documents</div>`;
+        return;
+      }
+
+      box.innerHTML = rows.slice(0, 10).map(function(r) {
+        const statusHtml = documentStatusBadge(r.VERIFY_STATUS || r.DOC_STATUS || 'MISSING');
+        return `
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:8px;">
+            <div style="font-size:13px;font-weight:700;">${esc(r.DOC_NAME || r.DOC_NAME_TH || r.DOC_CODE || '-')}</div>
+            <div>${statusHtml}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTransitionActions(actions) {
+      const box = document.getElementById('detailActionButtons');
+      if (!box) return;
+
+      if (!Array.isArray(actions) || !actions.length) {
+        box.innerHTML = `<div class="muted">No available actions</div>`;
+        return;
+      }
+
+      box.innerHTML = actions.map(function(a) {
+        const label = a.ACTION_NAME_TH || a.TRANSITION_CODE || 'Action';
+        const code = a.TRANSITION_CODE || '';
+
+        let note = '';
+        if (String(a.REQUIRES_REASON_FLAG || 'N') === 'Y') note += ' • ต้องใส่เหตุผล';
+        if (String(a.REQUIRES_EFFECTIVE_DATE_FLAG || 'N') === 'Y') note += ' • ต้องใส่วันที่';
+        if (String(a.REQUIRES_APPROVAL_FLAG || 'N') === 'Y') note += ' • ต้องมีสิทธิ์อนุมัติ';
+
+        return `
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <button class="btn btn-primary" onclick="App.executeTransition('${escAttr(code)}')">${esc(label)}</button>
+            <div class="muted" style="font-size:11px;">${note ? esc(note.replace(/^ • /,'')) : ''}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function executeTransition(actionCode) {
+      if (!state.currentProjectId || !actionCode) {
+        showMessage('ข้อมูลไม่ครบสำหรับ transition');
+        return;
+      }
+
+      if (!(google && google.script && google.script.run && google.script.run.apiExecuteTransition)) {
+        showMessage('ไม่พบ apiExecuteTransition');
+        return;
+      }
+
+      const payload = {
+        REASON_CODE: getValue('transitionReasonCode'),
+        EFFECTIVE_AT: getValue('transitionEffectiveAt'),
+        APPROVED_BY: getValue('transitionApprovedBy'),
+        COMMENT_TEXT: getValue('transitionComment')
+      };
+
+      showMessage('กำลังบันทึก transition...');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success) {
+            showMessage((res && res.message) || 'Transition failed');
+            return;
+          }
+
+          clearTransitionInputs();
+          showMessage(res.message || 'Transition success');
+          loadProjectDetail(state.currentProjectId);
+          setTimeout(hideMessage, 1500);
+        })
+        .withFailureHandler(function(err) {
+          console.error(err);
+          showMessage((err && err.message) ? err.message : 'Transition error');
+        })
+        .apiExecuteTransition(state.currentProjectId, actionCode, payload);
+    }
+
+    function clearTransitionInputs() {
+      setValue('transitionReasonCode', '');
+      setValue('transitionApprovedBy', '');
+      setValue('transitionComment', '');
+      setValue('transitionEffectiveAt', currentDateTimeString());
+    }
+
+    function clearProjectFilters() {
+      setValue('filterProjectId', '');
+      setValue('filterKeyword', '');
+      setValue('filterPaymentType', '');
+      setValue('filterStageCode', '');
+      setValue('filterStatusCode', '');
+      loadProjects();
+    }
+
+    function documentStatusBadge(status) {
+      const s = String(status || '').toUpperCase();
+      if (s === 'VERIFIED') return `<span class="badge badge-green">VERIFIED</span>`;
+      if (s === 'PENDING') return `<span class="badge badge-amber">PENDING</span>`;
+      if (s === 'REJECTED') return `<span class="badge badge-red">REJECTED</span>`;
+      if (s === 'MISSING') return `<span class="badge badge-red">MISSING</span>`;
+      return `<span class="badge badge-slate">${esc(s || '-')}</span>`;
+    }
+
+    function statusBadge(status) {
+      const s = String(status || '').toUpperCase();
+
+      if (['DONE', 'WON', 'VERIFIED', 'PAID', 'APPROVED_BY_ENGINEER', 'APPROVED_FOR_PAYMENT'].includes(s)) {
+        return `<span class="badge badge-green">${esc(s)}</span>`;
+      }
+      if (['WAITING', 'PENDING', 'UNDER_REVIEW', 'HOLD'].includes(s)) {
+        return `<span class="badge badge-amber">${esc(s)}</span>`;
+      }
+      if (['RETURNED', 'REJECTED', 'LOST', 'CANCELLED_FINAL'].includes(s)) {
+        return `<span class="badge badge-red">${esc(s)}</span>`;
+      }
+      if (['IN_PROGRESS', 'SCHEDULED', 'SUBMITTED_TO_ENGINEER', 'SUBMITTED_TO_PAYMENT', 'REOPENED'].includes(s)) {
+        return `<span class="badge badge-blue">${esc(s)}</span>`;
+      }
+      return `<span class="badge badge-slate">${esc(s || '-')}</span>`;
+    }
+
+    function riskBadge(flag) {
+      return String(flag || '').toUpperCase() === 'Y'
+        ? `<span class="badge badge-red">RISK</span>`
+        : `<span class="badge badge-green">OK</span>`;
+    }
+
+    function progressCell(value) {
+      const pct = Math.max(0, Math.min(100, Number(value) || 0));
+      return `
+        <div class="progress-wrap">
+          <div class="progress-text">${pct}%</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>
+      `;
+    }
+
+    function currentDateTimeString() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      return [
+        d.getFullYear(),
+        pad(d.getMonth() + 1),
+        pad(d.getDate())
+      ].join('-') + ' ' + [
+        pad(d.getHours()),
+        pad(d.getMinutes()),
+        pad(d.getSeconds())
+      ].join(':');
+    }
+
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value == null ? '' : value;
+    }
+
+    function setHtml(id, html) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = html == null ? '' : html;
+    }
+
+    function getValue(id) {
+      const el = document.getElementById(id);
+      return el ? String(el.value || '').trim() : '';
+    }
+
+    function setValue(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = value == null ? '' : value;
+    }
+
+    function safeNum(v) {
+      return Number(v || 0).toLocaleString();
+    }
+
+    function esc(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escAttr(v) {
+      return esc(v).replace(/"/g, '&quot;');
+    }
+
+    function showMessage(msg) {
+      const el = document.getElementById('globalMessage');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.classList.remove('hidden');
+    }
+
+    function hideMessage() {
+      const el = document.getElementById('globalMessage');
+      if (!el) return;
+      el.classList.add('hidden');
+      el.textContent = '';
+    }
+
+    function showLoginMessage(msg) {
+      const el = document.getElementById('loginMessage');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.classList.remove('hidden');
+    }
+
+    function hideLoginMessage() {
+      const el = document.getElementById('loginMessage');
+      if (!el) return;
+      el.classList.add('hidden');
+      el.textContent = '';
+    }
+
+    return {
+      init,
+      openProject,
+      executeTransition
+    };
+  })();
+
+  document.addEventListener('DOMContentLoaded', App.init);
+</script>

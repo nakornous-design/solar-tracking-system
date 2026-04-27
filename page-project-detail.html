@@ -1,0 +1,138 @@
+<section id="view-projectDetail" class="view-section hidden">
+  <div class="card">
+    <div class="detail-header">
+      <div>
+        <div id="detailProjectTitle" class="section-title">Project Detail</div>
+        <div id="detailProjectSubtitle" class="muted">-</div>
+      </div>
+
+      <div class="detail-header-right">
+        <div class="metric-box">
+          <div class="metric-label">Payment Type</div>
+          <div id="detailPaymentType" class="metric-value">-</div>
+        </div>
+
+        <div class="metric-box">
+          <div class="metric-label">Owner</div>
+          <div id="detailOwner" class="metric-value">-</div>
+        </div>
+
+        <div class="metric-box metric-progress-box">
+          <div class="metric-label">Progress</div>
+          <div id="detailProgressText" class="metric-value">0%</div>
+          <div class="progress-bar">
+            <div id="detailProgressFill" class="progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card current-stage-card">
+    <div class="current-stage-top">
+      <div>
+        <div class="current-stage-label">Current Stage</div>
+        <div id="detailCurrentStage" class="current-stage-name">-</div>
+      </div>
+      <div id="detailCurrentStatus"></div>
+    </div>
+
+    <div class="current-stage-grid">
+      <div class="info-tile">
+        <div class="info-label">Current Owner</div>
+        <div id="detailCurrentOwner" class="info-value">-</div>
+      </div>
+
+      <div class="info-tile">
+        <div class="info-label">Next Review Date</div>
+        <div id="detailNextReviewDate" class="info-value">-</div>
+      </div>
+
+      <div class="info-tile">
+        <div class="info-label">Next Action</div>
+        <div id="detailNextAction" class="info-value">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Project Milestone</div>
+    <div id="detailMilestone" class="milestone-wrap"></div>
+  </div>
+
+  <div class="detail-main-grid">
+    <div class="left-stack">
+      <div class="card">
+        <div class="section-title">Project Summary</div>
+
+        <div class="summary-grid">
+          <div class="summary-row"><span class="summary-key">PROJECT_ID</span><span id="sumProjectId" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">PROJECT_NAME</span><span id="sumProjectName" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">PROCESS_CODE</span><span id="sumProcessCode" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">PAYMENT_TYPE</span><span id="sumPaymentType" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">CURRENT_STAGE</span><span id="sumCurrentStage" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">CURRENT_STATUS</span><span id="sumCurrentStatus" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">CURRENT_OWNER</span><span id="sumCurrentOwner" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">RISK</span><span id="sumRisk" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">NEXT_ACTION</span><span id="sumNextAction" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">NEXT_REVIEW_DATE</span><span id="sumNextReviewDate" class="summary-val">-</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Timeline</div>
+        <div id="detailTimeline" class="timeline-list">
+          <div class="muted">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-stack">
+      <div class="card">
+        <div class="section-title">Transition Actions</div>
+        <div id="detailActionButtons" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px;">
+          <div class="form-group">
+            <label>Reason Code</label>
+            <input id="transitionReasonCode" class="input" placeholder="เช่น RES_DOC_INCOMPLETE">
+          </div>
+
+          <div class="form-group">
+            <label>Effective At</label>
+            <input id="transitionEffectiveAt" class="input" placeholder="YYYY-MM-DD HH:MM:SS">
+          </div>
+
+          <div class="form-group">
+            <label>Approved By</label>
+            <input id="transitionApprovedBy" class="input" placeholder="เช่น manager01">
+          </div>
+
+          <div class="form-group">
+            <label>Comment</label>
+            <input id="transitionComment" class="input" placeholder="หมายเหตุ">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Document Summary</div>
+        <div id="detailDocumentSummary" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="muted">Loading...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Billing & Payment Tracking</div>
+        <div class="summary-grid">
+          <div class="summary-row"><span class="summary-key">Handover Signed</span><span id="trackHandoverSigned" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">Billing Submitted</span><span id="trackBillingSubmitted" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">Engineer Approved</span><span id="trackEngineerApproved" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">Submitted to Payment</span><span id="trackPaymentSubmitted" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">Approved for Payment</span><span id="trackApprovedForPayment" class="summary-val">-</span></div>
+          <div class="summary-row"><span class="summary-key">Paid Date</span><span id="trackPaidDate" class="summary-val">-</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
