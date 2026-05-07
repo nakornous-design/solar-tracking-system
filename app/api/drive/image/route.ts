@@ -33,8 +33,9 @@ export async function GET(request: Request) {
         'Cache-Control': 'public, max-age=86400',
       },
     });
-  } catch (error: any) {
-    console.error('Image Proxy Error:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Image Proxy Error:', message);
     return new NextResponse('Error loading image', { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 
 interface CreateProjectModalProps {
@@ -18,24 +18,22 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     });
     const [isLoading, setIsLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
-    const [templates, setTemplates] = useState<any[]>([]);
+    const [templates, setTemplates] = useState<Array<{ id: string; name?: string; template_name?: string }>>([]);
 
-    useEffect(() => {
-        if (isOpen) {
-            fetchTemplates();
-        }
-    }, [isOpen]);
-
-    async function fetchTemplates() {
-        const { data, error } = await supabase
+    const fetchTemplates = useCallback(async () => {
+        const { data } = await supabase
             .from('workflow_templates')
-            .select('*');
-        
+            .select('id,name,template_name');
+
         if (data && data.length > 0) {
             setTemplates(data);
             // ถ้าดึงข้อมูลมาได้ และยังไม่ได้เลือก Template ให้เลือกตัวแรกเป็นค่าเริ่มต้น
-            setFormData(prev => ({ ...prev, templateId: data[0].id }));
+            setFormData((prev) => ({ ...prev, templateId: prev.templateId || data[0].id }));
         }
+    }, []);
+
+        if (isOpen && templates.length === 0) {
+        void fetchTemplates();
     }
 
     if (!isOpen) return null;
@@ -81,8 +79,9 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
             onClose();
             setFormData({ customerCode: "", customerName: "", templateId: "", standardId: "V8R2" });
 
-        } catch (error: any) {
-            setErrorMsg(error.message);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
+            setErrorMsg(message);
         } finally {
             setIsLoading(false);
         }

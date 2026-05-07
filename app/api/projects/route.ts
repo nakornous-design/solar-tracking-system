@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+interface CreateProjectRequestBody {
+    customerCode?: string;
+    customerName?: string;
+    templateId?: string;
+    standardId?: string;
+}
+
 // 1. สร้างตัวเชื่อมต่อ Supabase ระดับ Admin (มีสิทธิ์จัดการตารางทั้งหมด)
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,8 +17,11 @@ const supabaseAdmin = createClient(
 export async function POST(request: Request) {
     try {
         // รับข้อมูลจาก Frontend เมื่อผู้ใช้กดปุ่ม Submit
-        const body = await request.json();
-        const { customerCode, customerName, templateId, standardId } = body;
+        const body = (await request.json()) as CreateProjectRequestBody;
+        const customerCode = body.customerCode?.trim();
+        const customerName = body.customerName?.trim();
+        const templateId = body.templateId;
+        const standardId = body.standardId;
 
         // ตรวจสอบความถูกต้องของข้อมูลเบื้องต้น (Validation)
         if (!customerCode || !customerName) {
@@ -66,10 +76,11 @@ export async function POST(request: Request) {
             message: 'สร้างโปรเจกต์และกาง Milestone สำเร็จ!'
         }, { status: 201 });
 
-    } catch (error: any) {
-        console.error('Create Project API Error:', error.message);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Create Project API Error:', message);
         return NextResponse.json(
-            { error: 'เกิดข้อผิดพลาดในการสร้างโปรเจกต์: ' + error.message },
+            { error: 'เกิดข้อผิดพลาดในการสร้างโปรเจกต์: ' + message },
             { status: 500 }
         );
     }

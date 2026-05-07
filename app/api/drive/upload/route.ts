@@ -80,8 +80,9 @@ export async function POST(request: Request) {
       fileId: driveRes.data.id,
       webViewLink: driveRes.data.webViewLink,
     });
-  } catch (error: any) {
-    console.error('Upload API Error:', error);
-    return NextResponse.json({ error: 'Failed to upload: ' + error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Upload API Error:', message);
+    return NextResponse.json({ error: 'Failed to upload: ' + message }, { status: 500 });
   }
 }

@@ -1,18 +1,50 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import CreateProjectModal from "../components/CreateProjectModal";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
+
+interface Project {
+  id: string;
+  customer_code: string;
+  customer_name: string;
+  created_at: string;
+  status?: string;
+  google_drive_folder_id?: string;
+}
+
+interface WorkflowDefinition {
+  step_name?: string;
+  order_index?: number;
+  sla_hours?: number;
+}
+
+interface EvidenceFile {
+  fileId: string;
+  name: string;
+}
+
+interface Milestone {
+  id: string;
+  actual_completed_at: string | null;
+  sla_status?: string;
+  evidence_files?: EvidenceFile[];
+  workflow_definitions?: WorkflowDefinition;
+  dynamicStatus?: 'Waiting' | 'Completed' | 'Overdue' | 'In Progress';
+  deadline?: Date | null;
+}
+
 export default function Dashboard() {
-  const [projects, setProjects] = useState<any[]>([]);
-  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'projects'>('dashboard');
   const [loading, setLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [milestones, setMilestones] = useState<any[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loadingMilestones, setLoadingMilestones] = useState(false);
   const [uploadingMilestoneId, setUploadingMilestoneId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -33,7 +65,7 @@ export default function Dashboard() {
     setLoading(false);
   }
 
-  async function handleSelectProject(project: any) {
+  async function handleSelectProject(project: Project) {
     setSelectedProject(project);
     setActiveTab('projects');
     setMilestones([]);
@@ -45,11 +77,11 @@ export default function Dashboard() {
       .eq('project_id', project.id);
 
     if (data) {
-      const sorted = (data as any[]).sort((a: any, b: any) => a.workflow_definitions?.order_index - b.workflow_definitions?.order_index);
+      const sorted = (data as Milestone[]).sort((a, b) => a.workflow_definitions?.order_index - b.workflow_definitions?.order_index);
       
       let previousCompleteTime: Date | null = new Date(project.created_at);
       
-      const milestonesWithSLA = sorted.map((m: any) => {
+      const milestonesWithSLA = sorted.map((m) => {
         const slaHours = m.workflow_definitions?.sla_hours || 0;
         let dynamicStatus = 'Waiting';
         let deadline: Date | null = null;
@@ -105,7 +137,7 @@ export default function Dashboard() {
     }
   }
 
-  async function handleFileUpload(milestone: any, e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(milestone: Milestone, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -144,8 +176,9 @@ export default function Dashboard() {
 
       alert(`File uploaded successfully!`);
       
-    } catch (error: any) {
-      alert("Upload failed: " + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      alert("Upload failed: " + message);
     } finally {
       setUploadingMilestoneId(null);
       e.target.value = '';
@@ -477,7 +510,7 @@ export default function Dashboard() {
                           className="relative grid w-full gap-3 pt-8"
                           style={{ gridTemplateColumns: `repeat(${Math.max(milestones.length, 1)}, minmax(0, 1fr))` }}
                         >
-                        {milestones.map((m: any, index: number) => {
+                        {milestones.map((m, index: number) => {
                           const isCompleted = m.dynamicStatus === 'Completed';
                           const isCurrent = m.dynamicStatus === 'In Progress' || m.dynamicStatus === 'Overdue';
                           const isOverdue = m.dynamicStatus === 'Overdue';
@@ -488,7 +521,7 @@ export default function Dashboard() {
                               <div className="relative z-10 flex h-8 w-full justify-center shrink-0">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold transition-all
                                   ${isCompleted ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' : 
-                                    isCurrent ? 'bg-white border-2 border-emerald-500 text-emerald-600 shadow-lg ring-4 ring-emerald-50' : 
+                                    isCurrent ? 'stage-current-dot relative bg-white border-2 border-emerald-500 text-emerald-600 shadow-lg ring-4 ring-emerald-50' : 
                                     'bg-slate-50 border border-slate-200 text-slate-400'}
                                 `}>
                                   {isCompleted ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg> : index + 1}
@@ -515,9 +548,9 @@ export default function Dashboard() {
                                   </div>
                                   {m.evidence_files?.length > 0 && (
                                     <div className="mt-auto flex -space-x-2 self-start">
-                                      {m.evidence_files.map((file: any, idx: number) => (
+                                      {m.evidence_files.map((file, idx: number) => (
                                         <button key={idx} onClick={() => setPreviewImage(`/api/drive/image?fileId=${file.fileId}`)} className="h-6 w-6 overflow-hidden rounded border-2 border-white shadow-sm transition-transform hover:scale-110">
-                                          <img src={`/api/drive/image?fileId=${file.fileId}`} alt="" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/150'} />
+                                          <Image src={`/api/drive/image?fileId=${file.fileId}`} alt={file.name || "Evidence preview"} width={24} height={24} className="w-full h-full object-cover" unoptimized />
                                         </button>
                                       ))}
                                     </div>
@@ -552,7 +585,7 @@ export default function Dashboard() {
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
           <div className="max-w-5xl w-full h-full flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-            <img src={previewImage} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
+            <Image src={previewImage} alt="Evidence preview" width={1400} height={900} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" unoptimized />
           </div>
         </div>
       )}

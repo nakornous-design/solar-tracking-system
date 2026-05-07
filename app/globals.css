@@ -32,3 +32,37 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 1); 
 }
+
+
+/* Stage timeline focus animation */
+@keyframes stagePulseRing {
+  0% { transform: scale(1); opacity: 0.55; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes stagePulseDot {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.stage-current-dot {
+  animation: stagePulseDot 1.8s ease-in-out infinite;
+}
+
+.stage-current-dot::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 2px solid rgba(16, 185, 129, 0.45);
+  animation: stagePulseRing 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-current-dot,
+  .stage-current-dot::after {
+    animation: none;
+  }
+}

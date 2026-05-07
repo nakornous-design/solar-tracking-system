@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 
+interface SetupFoldersRequestBody {
+  customerCode?: string;
+}
+
+interface CreatedFolder {
+  id?: string | null;
+  name?: string | null;
+}
+
 // 1. ตั้งค่าการยืนยันตัวตนด้วย Google OAuth2 (สวมรอยเป็นผู้ใช้จริง)
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_OAUTH_CLIENT_ID,
@@ -16,8 +25,8 @@ const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { customerCode } = body;
+    const body = (await request.json()) as SetupFoldersRequestBody;
+    const customerCode = body.customerCode?.trim();
 
     // ตรวจสอบว่ามีการส่ง Customer Code มาหรือไม่
     if (!customerCode) {
@@ -29,7 +38,7 @@ export async function POST(request: Request) {
 
     // 2. สร้าง Root Folder โดยใช้ชื่อเป็น Customer Code
     const parentFolderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID;
-    const rootFolderMetadata: any = {
+    const rootFolderMetadata: { name: string; mimeType: string; parents?: string[] } = {
       name: customerCode,
       mimeType: 'application/vnd.google-apps.folder',
     };
@@ -57,7 +66,7 @@ export async function POST(request: Request) {
     ];
 
     // 4. วนลูปเพื่อสร้างโฟลเดอร์ย่อยทั้งหมดเข้าไปใน Root Folder
-    const createdSubFolders: any[] = [];
+    const createdSubFolders: CreatedFolder[] = [];
     
     // ใช้ Promise.all เพื่อสร้างโฟลเดอร์พร้อมกัน (เร็วกว่าสร้างทีละอัน)
     await Promise.all(
@@ -81,10 +90,11 @@ export async function POST(request: Request) {
       subFolders: createdSubFolders
     }, { status: 200 });
 
-  } catch (error: any) {
-    console.error('Google Drive API Error:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Google Drive API Error:', message);
     return NextResponse.json(
-      { error: 'Internal Server Error: Failed to create folders - ' + error.message }, 
+      { error: 'Internal Server Error: Failed to create folders - ' + message }, 
       { status: 500 }
     );
   }
