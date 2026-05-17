@@ -445,25 +445,26 @@ export function stageVisual(stage: any) {
   const key = raw.toUpperCase().replace(/\s+/g, "_");
   const text = `${raw} ${stage?.name || ""} ${stage?.workflow_definitions?.step_name || ""}`.toLowerCase();
   const visuals: Record<string, { gradient: string; iconClass: string; icon: string }> = {
-    LEAD: { gradient: "from-sky-50 via-white to-white", iconClass: "border-sky-100 bg-sky-50 text-sky-600", icon: "user" },
-    SURVEY: { gradient: "from-emerald-50 via-white to-white", iconClass: "border-emerald-100 bg-emerald-50 text-emerald-600", icon: "pin" },
-    TSSR: { gradient: "from-indigo-50 via-white to-white", iconClass: "border-indigo-100 bg-indigo-50 text-indigo-600", icon: "plan" },
-    QUOTATION: { gradient: "from-cyan-50 via-white to-white", iconClass: "border-cyan-100 bg-cyan-50 text-cyan-600", icon: "quote" },
-    LOAN_DOCUMENT_COLLECTION: { gradient: "from-sky-50 via-white to-white", iconClass: "border-sky-100 bg-sky-50 text-sky-600", icon: "file" },
-    LOAN_SUBMISSION: { gradient: "from-sky-50 via-white to-white", iconClass: "border-sky-100 bg-sky-50 text-sky-600", icon: "handover" },
-    LOAN_REVIEW: { gradient: "from-sky-50 via-white to-white", iconClass: "border-sky-100 bg-sky-50 text-sky-600", icon: "documentEye" },
-    LOAN_APPROVAL: { gradient: "from-sky-50 via-white to-white", iconClass: "border-sky-100 bg-sky-50 text-sky-600", icon: "check" },
-    DOWN_PAYMENT: { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-100 bg-amber-50 text-amber-600", icon: "card" },
-    PAYMENT: { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-100 bg-amber-50 text-amber-600", icon: "card" },
-    READY_FOR_INSTALL: { gradient: "from-lime-50 via-white to-white", iconClass: "border-lime-100 bg-lime-50 text-lime-700", icon: "tool" },
+    LEAD: { gradient: "from-blue-50 via-white to-white", iconClass: "border-blue-200 bg-blue-50 text-blue-700", icon: "user" },
+    SURVEY: { gradient: "from-teal-50 via-white to-white", iconClass: "border-teal-200 bg-teal-50 text-teal-700", icon: "pin" },
+    TSSR: { gradient: "from-indigo-50 via-white to-white", iconClass: "border-indigo-200 bg-indigo-50 text-indigo-700", icon: "compass" },
+    TECHNICAL_DESIGN: { gradient: "from-indigo-50 via-white to-white", iconClass: "border-indigo-200 bg-indigo-50 text-indigo-700", icon: "ruler" },
+    QUOTATION: { gradient: "from-sky-50 via-white to-white", iconClass: "border-sky-200 bg-sky-50 text-sky-700", icon: "quote" },
+    LOAN_DOCUMENT_COLLECTION: { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-200 bg-amber-50 text-amber-700", icon: "files" },
+    LOAN_SUBMISSION: { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-200 bg-amber-50 text-amber-700", icon: "fileCheck" },
+    LOAN_REVIEW: { gradient: "from-orange-50 via-white to-white", iconClass: "border-orange-200 bg-orange-50 text-orange-700", icon: "clock" },
+    LOAN_APPROVAL: { gradient: "from-emerald-50 via-white to-white", iconClass: "border-emerald-200 bg-emerald-50 text-emerald-700", icon: "badgeCheck" },
+    DOWN_PAYMENT: { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-200 bg-amber-50 text-amber-700", icon: "creditCard" },
+    PAYMENT: { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-200 bg-amber-50 text-amber-700", icon: "wallet" },
+    READY_FOR_INSTALL: { gradient: "from-emerald-50 via-white to-white", iconClass: "border-emerald-200 bg-emerald-50 text-emerald-700", icon: "packageCheck" },
     SCHEDULING: { gradient: "from-violet-50 via-white to-white", iconClass: "border-violet-100 bg-violet-50 text-violet-600", icon: "calendar" },
-    INSTALLATION: { gradient: "from-orange-50 via-white to-white", iconClass: "border-orange-100 bg-orange-50 text-orange-600", icon: "solar" },
-    QA: { gradient: "from-teal-50 via-white to-white", iconClass: "border-teal-100 bg-teal-50 text-teal-600", icon: "shield" },
-    HANDOVER: { gradient: "from-blue-50 via-white to-white", iconClass: "border-blue-100 bg-blue-50 text-blue-600", icon: "handover" },
-    MAT_CUT: { gradient: "from-rose-50 via-white to-white", iconClass: "border-rose-100 bg-rose-50 text-rose-600", icon: "receipt" },
-    "ตัด_MAT": { gradient: "from-rose-50 via-white to-white", iconClass: "border-rose-100 bg-rose-50 text-rose-600", icon: "receipt" },
-    BILLING: { gradient: "from-rose-50 via-white to-white", iconClass: "border-rose-100 bg-rose-50 text-rose-600", icon: "receipt" },
-    CLOSURE: { gradient: "from-slate-100 via-white to-white", iconClass: "border-slate-200 bg-slate-50 text-slate-600", icon: "check" },
+    INSTALLATION: { gradient: "from-emerald-50 via-white to-white", iconClass: "border-emerald-200 bg-emerald-50 text-emerald-700", icon: "tool" },
+    QA: { gradient: "from-green-50 via-white to-white", iconClass: "border-green-200 bg-green-50 text-green-700", icon: "shield" },
+    HANDOVER: { gradient: "from-cyan-50 via-white to-white", iconClass: "border-cyan-200 bg-cyan-50 text-cyan-700", icon: "handshake" },
+    MAT_CUT: { gradient: "from-slate-50 via-white to-white", iconClass: "border-slate-200 bg-slate-50 text-slate-700", icon: "file" },
+    "ตัด_MAT": { gradient: "from-slate-50 via-white to-white", iconClass: "border-slate-200 bg-slate-50 text-slate-700", icon: "file" },
+    BILLING: { gradient: "from-slate-50 via-white to-white", iconClass: "border-slate-300 bg-slate-50 text-slate-700", icon: "receipt" },
+    CLOSURE: { gradient: "from-slate-50 via-white to-white", iconClass: "border-slate-300 bg-slate-50 text-slate-700", icon: "flag" },
   };
 
   if (visuals[key]) return visuals[key];
@@ -476,14 +477,34 @@ export function stageVisual(stage: any) {
     if (text.includes("approve") || text.includes("อนุมัติ") || text.includes("confirm") || text.includes("ยืนยัน")) return visuals.LOAN_APPROVAL;
     return visuals.LOAN_DOCUMENT_COLLECTION;
   }
-  if (text.includes("invoice") || text.includes("ใบแจ้งหนี้")) return { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-100 bg-amber-50 text-amber-600", icon: "receipt" };
+  if (text.includes("invoice") || text.includes("ใบแจ้งหนี้")) return { gradient: "from-amber-50 via-white to-white", iconClass: "border-amber-200 bg-amber-50 text-amber-700", icon: "receipt" };
   if (text.includes("payment") || text.includes("ชำระ") || text.includes("เงิน")) return visuals.PAYMENT;
   if (text.includes("ready") || text.includes("พร้อมติดตั้ง")) return visuals.READY_FOR_INSTALL;
   if (text.includes("schedule") || text.includes("calendar") || text.includes("ตาราง")) return visuals.SCHEDULING;
   if (text.includes("install") || text.includes("ติดตั้ง")) return visuals.INSTALLATION;
   if (text.includes("qa") || text.includes("quality") || text.includes("ตรวจคุณภาพ")) return visuals.QA;
   if (text.includes("handover") || text.includes("ส่งมอบ")) return visuals.HANDOVER;
-  if (text.includes("mat") || text.includes("billing") || text.includes("วางบิล")) return visuals.BILLING;
+  if (text.includes("mat")) return visuals.MAT_CUT;
+  if (text.includes("billing") || text.includes("วางบิล")) return visuals.BILLING;
   if (text.includes("close") || text.includes("closure") || text.includes("ปิด")) return visuals.CLOSURE;
   return { gradient: "from-slate-50 via-white to-white", iconClass: "border-slate-200 bg-slate-50 text-slate-600", icon: "file" };
+}
+
+export function stageSolidIconClass(stage: any) {
+  const visual = stageVisual(stage);
+  const tone = visual.iconClass;
+
+  if (tone.includes("blue-")) return "workflow-stage-solid-blue";
+  if (tone.includes("teal-")) return "workflow-stage-solid-teal";
+  if (tone.includes("indigo-")) return "workflow-stage-solid-indigo";
+  if (tone.includes("violet-")) return "workflow-stage-solid-violet";
+  if (tone.includes("sky-")) return "workflow-stage-solid-sky";
+  if (tone.includes("amber-")) return "workflow-stage-solid-amber";
+  if (tone.includes("orange-")) return "workflow-stage-solid-orange";
+  if (tone.includes("emerald-")) return "workflow-stage-solid-emerald";
+  if (tone.includes("green-")) return "workflow-stage-solid-green";
+  if (tone.includes("cyan-")) return "workflow-stage-solid-cyan";
+  if (tone.includes("rose-")) return "workflow-stage-solid-rose";
+
+  return "workflow-stage-solid-slate";
 }

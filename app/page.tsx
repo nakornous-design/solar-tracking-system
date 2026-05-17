@@ -24,7 +24,6 @@ import {
   exceptionSeverityClass,
   fieldJobCheckIn,
   formatDateTime,
-  formatElapsedTime,
   formatScheduleDayLabel,
   formatSlaDuration,
   gateSeverityClass,
@@ -45,24 +44,26 @@ import {
   sortProjectDocuments,
   stageApprovedOverride,
   stageCompletionGap,
-  stageCompletionHours,
   stageDisplay,
   stageOverrideableBlockers,
   stageOwner,
   stagePendingOverride,
+  stageSolidIconClass,
   stageVisual,
   statusLabel,
   severityLabel,
   exceptionCategoryLabel,
   workflowTypeLabel,
   timelineElapsedHours,
-  transitionSlaTone,
   transitionTimeClass,
 } from "../lib/project-ui";
 import CreateProjectModal from "../components/CreateProjectModal";
 import AppHeader from "../components/layout/AppHeader";
 import AppSidebar from "../components/layout/AppSidebar";
+import CompactWorkflowMiniRail from "../components/workflow/CompactWorkflowMiniRail";
 import StageIcon from "../components/workflow/StageIcon";
+import WorkflowStageConnector from "../components/workflow/WorkflowStageConnector";
+import WorkflowStageTile from "../components/workflow/WorkflowStageTile";
 import CompleteStageModal from "../components/workflow/CompleteStageModal";
 import ChecklistReviewModal from "../components/workflow/ChecklistReviewModal";
 import GateBlockModal from "../components/workflow/GateBlockModal";
@@ -375,19 +376,24 @@ function timelineActivityView(activity: any) {
 function activityAuditIcon(activity: any) {
   const action = String(activity?.action || "").toUpperCase();
   const afterStatus = String(activity?.after_state?.status || activity?.metadata?.status || "").toUpperCase();
-  if (action.includes("PROJECT") && action.includes("CREATED")) return { icon: "folderPlus", className: "border-blue-100 bg-blue-50 text-blue-600" };
-  if (action.includes("TRANSITION") || action.includes("STAGE_CHANGED")) return { icon: "arrowRight", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
-  if ((action.includes("CHECKLIST") && afterStatus === "PASSED") || action.includes("CHECKLIST_PASSED")) return { icon: "check", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
-  if (action.includes("DOCUMENT_REJECTED")) return { icon: "fileWarning", className: "border-rose-100 bg-rose-50 text-rose-600" };
-  if (action.includes("DOCUMENT") && action.includes("UPLOAD")) return { icon: "fileUp", className: "border-blue-100 bg-blue-50 text-blue-600" };
-  if (action.includes("BLOCKED") || action.includes("FAIL")) return { icon: "alert", className: "border-rose-100 bg-rose-50 text-rose-600" };
-  if (action.includes("APPROVAL") && (action.includes("APPROVED") || action.includes("DECIDED"))) return { icon: "shield", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
-  if (action.includes("APPROVAL") || action.includes("OVERRIDE")) return { icon: "wait", className: "border-amber-100 bg-amber-50 text-amber-600" };
-  if (action.includes("DRIVE") || action.includes("FOLDER")) return { icon: "folderCheck", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
-  if (action.includes("PAYMENT") || action.includes("BILLING")) return { icon: "creditCard", className: "border-blue-100 bg-blue-50 text-blue-600" };
-  if (action.includes("QA")) return { icon: "shield", className: afterStatus === "FAILED" ? "border-rose-100 bg-rose-50 text-rose-600" : "border-emerald-100 bg-emerald-50 text-emerald-600" };
-  if (action.includes("SYSTEM")) return { icon: "bot", className: "border-slate-100 bg-slate-50 text-slate-500" };
-  return { icon: "activity", className: "border-slate-100 bg-slate-50 text-slate-500" };
+  const decision = String(activity?.metadata?.decision || activity?.metadata?.approval_status || "").toUpperCase();
+
+  if (action.includes("PROJECT") && action.includes("CREATED")) return { icon: "folderPlus", className: "workflow-stage-solid-blue" };
+  if (action.includes("TRANSITION") || action.includes("STAGE_CHANGED")) return { icon: "arrowRight", className: "workflow-stage-solid-emerald" };
+  if ((action.includes("CHECKLIST") && afterStatus === "PASSED") || action.includes("CHECKLIST_PASSED")) return { icon: "checkCircle", className: "workflow-stage-solid-green" };
+  if (action.includes("CHECKLIST") && (afterStatus === "FAILED" || action.includes("FAILED"))) return { icon: "x", className: "workflow-stage-solid-rose" };
+  if (action.includes("DOCUMENT_REJECTED") || action.includes("DOCUMENT_MISSING")) return { icon: "fileWarning", className: "workflow-stage-solid-rose" };
+  if (action.includes("DOCUMENT_VERIFIED")) return { icon: "checkCircle", className: "workflow-stage-solid-green" };
+  if (action.includes("DOCUMENT") && action.includes("UPLOAD")) return { icon: "fileUp", className: "workflow-stage-solid-blue" };
+  if (action.includes("BLOCKED") || action.includes("FAIL")) return { icon: "warningCircle", className: "workflow-stage-solid-rose" };
+  if (action.includes("APPROVAL") && (action.includes("REJECTED") || decision === "REJECTED")) return { icon: "x", className: "workflow-stage-solid-rose" };
+  if (action.includes("APPROVAL") && (action.includes("APPROVED") || action.includes("DECIDED") || decision === "APPROVED")) return { icon: "badgeCheck", className: "workflow-stage-solid-green" };
+  if (action.includes("APPROVAL") || action.includes("OVERRIDE")) return { icon: "waitBadge", className: "workflow-stage-solid-amber" };
+  if (action.includes("DRIVE") || action.includes("FOLDER")) return { icon: "folderCheck", className: "workflow-stage-solid-teal" };
+  if (action.includes("PAYMENT") || action.includes("BILLING")) return { icon: "creditCard", className: "workflow-stage-solid-amber" };
+  if (action.includes("QA")) return { icon: afterStatus === "FAILED" ? "warningCircle" : "shield", className: afterStatus === "FAILED" ? "workflow-stage-solid-rose" : "workflow-stage-solid-green" };
+  if (action.includes("SYSTEM")) return { icon: "bot", className: "workflow-stage-solid-slate" };
+  return { icon: "activity", className: "workflow-stage-solid-slate" };
 }
 
 function activityActorLine(activity: any) {
@@ -408,7 +414,6 @@ function activityContextLine(activity: any) {
   const action = String(activity?.action || "").toUpperCase();
   const relatedChecklist = activity?.relatedChecklist || null;
   const checklistCode = relatedChecklist?.code || metadata.checklist_code || metadata.checklistCode || metadata.gate_code || metadata.gateCode;
-  const status = relatedChecklist?.status || activity?.after_state?.status || metadata.status;
   if (action.includes("CHECKLIST") || relatedChecklist) {
     const parts = [
       activity?.stageTitle || activity?.stageCode,
@@ -3366,15 +3371,6 @@ export default function Dashboard() {
       overSla: dashboardStageDistribution.filter((stage: any) => !dashboardGroupedCodeSet.has(stage.code)).reduce((sum: number, stage: any) => sum + stage.overSla, 0),
     },
   ].filter((group: any) => group.key !== "other" || group.stages.length > 0);
-  const dashboardRailToneClasses: Record<string, string> = {
-    sky: "border-sky-600 bg-sky-600 text-white",
-    cyan: "border-cyan-600 bg-cyan-600 text-white",
-    amber: "border-amber-500 bg-amber-500 text-white",
-    orange: "border-orange-500 bg-orange-500 text-white",
-    teal: "border-teal-600 bg-teal-600 text-white",
-    rose: "border-rose-500 bg-rose-500 text-white",
-    slate: "border-slate-500 bg-slate-500 text-white",
-  };
   const dashboardStageTotal = Math.max(1, projects.length);
   const selectedDashboardGroup = dashboardStageFilter === "ALL"
     ? null
@@ -3680,6 +3676,7 @@ export default function Dashboard() {
   const timelineProgressPercent = totalMilestones > 1 ? Math.min(100, Math.max(0, (timelineTargetIndex / (totalMilestones - 1)) * 100)) : 0;
   const timelineRailTone = overdueMilestones > 0 ? 'rose' : nearSlaMilestones > 0 ? 'amber' : 'emerald';
   const statusMiniRailVisual = currentMilestone ? stageVisual(currentMilestone) : { icon: 'check', iconClass: 'border-emerald-100 bg-emerald-50 text-emerald-700' };
+  const statusMiniRailSolidClass = currentMilestone ? stageSolidIconClass(currentMilestone) : "workflow-stage-solid-emerald";
   const statusSummaryTone = timelineRailTone as "emerald" | "amber" | "rose";
   const actionSummaryTone = currentStageBlockers.length ? "rose" : "emerald";
   const approvalSummaryTone = projectPendingApprovals.length ? "amber" : "slate";
@@ -4208,38 +4205,7 @@ export default function Dashboard() {
                               {isRisk && <span className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">Risk</span>}
                               {!isRisk && isNear && <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Near SLA</span>}
                             </div>
-                            <div className="flex min-w-0 items-center overflow-hidden">
-                              {dashboardPipelineGroups.map((railGroup: any, railIndex: number) => {
-                                const isCurrent = railGroup.key === currentGroup?.key;
-                                const isDone = currentGroupOrder > 0 && railGroup.order < currentGroupOrder;
-                                const railVisual = stageVisual(railGroup.stages[0] || { code: railGroup.codes[0] || railGroup.key });
-                                const activeToneClass = dashboardRailToneClasses[railGroup.tone] || dashboardRailToneClasses.slate;
-                                return (
-                                  <span key={railGroup.key} className="flex flex-1 items-center" title={railGroup.label}>
-                                    {railIndex > 0 && <span className={`h-[2px] flex-1 rounded-full ${isCurrent ? 'bg-emerald-500' : isDone ? 'bg-sky-500' : 'bg-slate-300'}`}></span>}
-                                    <span
-                                      className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[0px] transition ${
-                                        isCurrent
-                                          ? 'scale-110 border-emerald-700 bg-emerald-600 text-white shadow-lg shadow-emerald-200 ring-2 ring-white outline outline-2 outline-emerald-700'
-                                          : isDone
-                                            ? `${activeToneClass} shadow-sm`
-                                            : 'border-slate-300 bg-slate-200 text-slate-500'
-                                      }`}
-                                    >
-                                      <span className={`${isDone || isCurrent ? 'text-white' : 'text-slate-500'} [&_svg]:h-3.5 [&_svg]:w-3.5`}>
-                                        <StageIcon name={railVisual.icon} />
-                                      </span>
-                                      {isDone && (
-                                        <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full border border-white bg-emerald-500 text-white [&_svg]:h-2 [&_svg]:w-2">
-                                          <StageIcon name="check" />
-                                        </span>
-                                      )}
-                                      {isDone ? '✓' : railGroup.order}
-                                    </span>
-                                  </span>
-                                );
-                              })}
-                            </div>
+                            <CompactWorkflowMiniRail groups={dashboardPipelineGroups} currentGroup={currentGroup} currentGroupOrder={currentGroupOrder} />
                             <div className="shrink-0 text-right">
                               <p className={`text-[11px] font-bold ${isRisk ? 'text-rose-600' : isNear ? 'text-amber-600' : 'text-emerald-600'}`}>{statusLabel(stage?.sla_status || project.sla_status || 'ON_TRACK')}</p>
                               <p className="mt-1 text-[10px] font-semibold text-slate-400">{stage?.due_at ? formatDateTime(stage.due_at) : 'ไม่มี deadline'}</p>
@@ -6512,6 +6478,7 @@ export default function Dashboard() {
                             const isDone = stage.dynamicStatus === 'Completed';
                             const isCurrent = stage.id === timelineTargetStage?.id;
                             const visual = stageVisual(stage);
+                            const solidStageClass = stageSolidIconClass(stage);
                             const isOverdue = stage.dynamicStatus === 'Overdue';
                             const isNearSla = stage.dynamicStatus === 'Near SLA';
                             const isBlocked = stage.dynamicStatus === 'Blocked';
@@ -6521,33 +6488,44 @@ export default function Dashboard() {
                                 ? 'active-stage-marker is-near-sla'
                                 : 'active-stage-marker is-on-track';
                             const showRunningTime = isCurrent && !stage.actual_completed_at && runningStageHours(stage);
+                            const activeTone = isOverdue || isBlocked ? 'rose' : isNearSla ? 'amber' : 'emerald';
+                            const nextStage = milestones[index + 1];
+                            const badgeTone = isDone
+                              ? "completed"
+                              : isCurrent && (isBlocked || isOverdue)
+                                ? "blocked"
+                                : isCurrent && isNearSla
+                                  ? "pending"
+                                  : null;
                             const stageTone = isCurrent
-                              ? `border-emerald-700 bg-emerald-600 text-white ring-4 ring-emerald-100 ${activeMarkerClass}`
+                              ? activeTone === 'rose'
+                                ? `border-rose-700 bg-rose-600 text-white shadow-xl shadow-rose-200/80 ring-4 ring-rose-100 ${activeMarkerClass}`
+                                : activeTone === 'amber'
+                                  ? `border-amber-700 bg-amber-500 text-white shadow-xl shadow-amber-200/80 ring-4 ring-amber-100 ${activeMarkerClass}`
+                                  : `${solidStageClass} ring-4 ring-blue-100 ${activeMarkerClass}`
                               : isDone
-                                ? `${visual.iconClass.replace('bg-', 'bg-').replace('text-', 'text-')} shadow-sm`
-                                : 'border-slate-200 bg-slate-200 text-slate-500';
+                                ? solidStageClass
+                                : 'border-slate-300 bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 text-slate-500 shadow-inner';
                             return (
                               <div key={stage.id} data-stage-id={stage.id} className="relative flex min-w-0 justify-center">
-                                <div className={`absolute left-0 top-6 h-[3px] w-[calc(50%-32px)] rounded-full ${index === 0 ? 'bg-transparent' : isDone || isCurrent ? 'bg-sky-500' : 'bg-slate-200'}`}></div>
-                                <div className={`absolute right-0 top-6 h-[3px] w-[calc(50%-32px)] rounded-full ${isDone ? 'bg-sky-500' : 'bg-slate-200'}`}></div>
+                                {nextStage && (
+                                  <WorkflowStageConnector
+                                    tone={isDone ? "active" : "inactive"}
+                                    style={{
+                                      left: 'calc(50% + 29px)',
+                                      width: `${workflowStageColumnWidth + workflowStageGapPx - 58}px`,
+                                    }}
+                                  />
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => setSelectedStageId(stage.id)}
                                   title={stageDisplay(stage).title}
                                   className="group relative z-10 flex w-full flex-col items-center text-center"
                                 >
-                                  <span className={`relative flex h-12 w-12 items-center justify-center rounded-full border text-[13px] transition-transform group-hover:scale-105 ${stageTone}`}>
-                                    <span className="[&_svg]:h-5 [&_svg]:w-5">
-                                      <StageIcon name={visual.icon} />
-                                    </span>
-                                    {isDone && (
-                                      <span className="absolute -right-0.5 top-7 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-emerald-500 text-white [&_svg]:h-2.5 [&_svg]:w-2.5">
-                                        <StageIcon name="check" />
-                                      </span>
-                                    )}
-                                  </span>
+                                  <WorkflowStageTile icon={visual.icon} className={stageTone} badgeTone={badgeTone} />
                                   <span className="mt-2 line-clamp-2 min-h-[28px] px-1 text-[10px] font-black leading-3 text-slate-900">{index + 1}. {stageDisplay(stage).title}</span>
-                                  <span className={`mt-1 inline-flex min-h-[16px] items-center justify-center gap-1 text-[10px] font-semibold ${isCurrent ? 'text-blue-600' : isDone ? 'text-slate-500' : 'text-slate-400'}`}>
+                                  <span className={`mt-1 inline-flex min-h-[16px] items-center justify-center gap-1 text-[10px] font-semibold ${isCurrent ? 'text-blue-600' : isDone ? 'text-emerald-600' : 'text-slate-400'}`}>
                                     <span>{isCurrent ? 'กำลังดำเนินการ' : isDone ? 'เสร็จสิ้น' : 'รอเริ่ม'}</span>
                                     {showRunningTime && (
                                       <span className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${runningStageBadgeClass(stage)}`}>
@@ -6757,8 +6735,8 @@ export default function Dashboard() {
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-2">
-                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border [&_svg]:h-4 [&_svg]:w-4 ${statusMiniRailVisual.iconClass}`}>
-                              <StageIcon name={statusMiniRailVisual.icon} />
+                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border ${statusMiniRailSolidClass}`}>
+                              <StageIcon name={statusMiniRailVisual.icon} className="h-4 w-4" />
                             </span>
                             <div className="min-w-0">
                               <p className="truncate text-[12px] font-black text-slate-900">{currentMilestone ? stageDisplay(currentMilestone).title : '-'}</p>
@@ -6947,8 +6925,8 @@ export default function Dashboard() {
                             <div key={`${activity.id}-${index}`} className="grid grid-cols-[34px_minmax(0,1fr)_96px] gap-3 rounded-lg border border-slate-100 bg-white/75 px-2.5 py-2.5">
                               <div className="relative flex justify-center">
                                 {index < projectLatestActivities.length - 1 && <span className="absolute top-8 h-[calc(100%+8px)] w-px bg-slate-200"></span>}
-                                <span className={`relative z-10 grid h-7 w-7 place-items-center rounded-full border [&_svg]:h-3.5 [&_svg]:w-3.5 ${auditIcon.className}`}>
-                                  <StageIcon name={auditIcon.icon} />
+                                <span className={`relative z-10 grid h-7 w-7 place-items-center rounded-full border ${auditIcon.className}`}>
+                                  <StageIcon name={auditIcon.icon} className="h-4 w-4" />
                                 </span>
                               </div>
                               <div className="min-w-0 pb-1">

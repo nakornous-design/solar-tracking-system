@@ -127,3 +127,81 @@ body {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+.workflow-stage-solid-blue,
+.workflow-stage-solid-teal,
+.workflow-stage-solid-indigo,
+.workflow-stage-solid-violet,
+.workflow-stage-solid-sky,
+.workflow-stage-solid-amber,
+.workflow-stage-solid-orange,
+.workflow-stage-solid-emerald,
+.workflow-stage-solid-green,
+.workflow-stage-solid-cyan,
+.workflow-stage-solid-rose,
+.workflow-stage-solid-slate {
+  color: #fff;
+  box-shadow:
+    0 14px 24px rgba(15, 23, 42, 0.14),
+    inset 0 1px 1px rgba(255, 255, 255, 0.34);
+}
+
+.workflow-stage-solid-blue {
+  background: linear-gradient(135deg, #3b82f6 0%, #0b5fe8 56%, #0647b8 100%);
+  border-color: #60a5fa;
+}
+
+.workflow-stage-solid-teal {
+  background: linear-gradient(135deg, #2dd4bf 0%, #0d9488 56%, #0f766e 100%);
+  border-color: #5eead4;
+}
+
+.workflow-stage-solid-indigo {
+  background: linear-gradient(135deg, #818cf8 0%, #4f46e5 54%, #3730a3 100%);
+  border-color: #a5b4fc;
+}
+
+.workflow-stage-solid-violet {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 54%, #5b21b6 100%);
+  border-color: #c4b5fd;
+}
+
+.workflow-stage-solid-sky {
+  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 54%, #2563eb 100%);
+  border-color: #7dd3fc;
+}
+
+.workflow-stage-solid-amber {
+  background: linear-gradient(135deg, #fcd34d 0%, #f59e0b 48%, #ea580c 100%);
+  border-color: #fde68a;
+}
+
+.workflow-stage-solid-orange {
+  background: linear-gradient(135deg, #fb923c 0%, #f97316 50%, #c2410c 100%);
+  border-color: #fdba74;
+}
+
+.workflow-stage-solid-emerald {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #047857 100%);
+  border-color: #6ee7b7;
+}
+
+.workflow-stage-solid-green {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #15803d 100%);
+  border-color: #86efac;
+}
+
+.workflow-stage-solid-cyan {
+  background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 52%, #0e7490 100%);
+  border-color: #67e8f9;
+}
+
+.workflow-stage-solid-rose {
+  background: linear-gradient(135deg, #fb7185 0%, #f43f5e 52%, #be123c 100%);
+  border-color: #fda4af;
+}
+
+.workflow-stage-solid-slate {
+  background: linear-gradient(135deg, #64748b 0%, #334155 54%, #0f172a 100%);
+  border-color: #94a3b8;
+}
