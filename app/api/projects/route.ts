@@ -1,76 +1,147 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { CreateProjectEngine } from "@/services/workflow/createProjectEngine";
+import { authorizeRequest } from "@/lib/api-permissions";
 
-// 1. สร้างตัวเชื่อมต่อ Supabase ระดับ Admin (มีสิทธิ์จัดการตารางทั้งหมด)
 const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const maybeError = error as { message?: string; details?: string; hint?: string; code?: string };
+    return [maybeError.message, maybeError.details, maybeError.hint, maybeError.code]
+      .filter(Boolean)
+      .join(" | ") || JSON.stringify(error);
+  }
+  return "Unknown error";
+}
+
 export async function POST(request: Request) {
-    try {
-        // รับข้อมูลจาก Frontend เมื่อผู้ใช้กดปุ่ม Submit
-        const body = await request.json();
-        const { customerCode, customerName, templateId, standardId } = body;
+  try {
+    const permission = await authorizeRequest(supabaseAdmin, request, ["admin", "supervisor", "sales", "ops", "sbc"]);
+    if (!permission.ok) return permission.response;
 
-        // ตรวจสอบความถูกต้องของข้อมูลเบื้องต้น (Validation)
-        if (!customerCode || !customerName) {
-            return NextResponse.json(
-                { error: 'กรุณากรอกรหัสลูกค้าและชื่อลูกค้าให้ครบถ้วน' },
-                { status: 400 }
-            );
-        }
+    const body = await request.json();
+    
+    const engine = new CreateProjectEngine(supabaseAdmin);
+    const project = await engine.execute({ ...body, actorUserId: permission.userId });
 
-        // 2. Insert ข้อมูลลงตาราง projects
-        const { data: newProject, error: projectError } = await supabaseAdmin
-            .from('projects')
-            .insert([
-                {
-                    customer_code: customerCode,
-                    customer_name: customerName,
-                    workflow_template_id: templateId || null,
-                    applied_standard_id: standardId || 'V8R2', // Snapshot มาตรฐาน V8R2 ติดโปรเจกต์ไว้
-                    status: 'Lead Registered'
-                }
-            ])
-            .select()
-            .single();
+    return NextResponse.json(
+      {
+        success: true,
+        project,
+        message: "Project runtime workflow created successfully.",
+      },
+      { status: 201 },
+    );
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    console.error("Create Project API Error:", message, error);
+    return NextResponse.json(
+      { error: `Create project failed: ${message}` },
+      { status: 400 }, // Changed to 400 to reflect bad request / validation error correctly based on error types
+    );
+  }
+}
 
-        if (projectError) throw projectError;
+export async function GET(request: Request) {
+  try {
+    const permission = await authorizeRequest(supabaseAdmin, request, [
+      "admin",
+      "supervisor",
+      "exec",
+      "sales",
+      "ops",
+      "engineer",
+      "qa",
+      "contractor",
+      "finance",
+      "rcm",
+      "sbc",
+    ]);
+    if (!permission.ok) return permission.response;
 
-        // 3. 🪄 Magic Step: กาง Milestone อัตโนมัติ (Auto-Assignment)
-        if (templateId) {
-            // 3.1 ไปดึง "พิมพ์เขียว" (17 ขั้นตอน) จาก template ที่เลือก
-            const { data: steps, error: stepsError } = await supabaseAdmin
-                .from('workflow_definitions')
-                .select('id, sla_hours')
-                .eq('template_id', templateId);
+    const url = new URL(request.url);
+    const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize") || 50)));
+    const search = String(url.searchParams.get("search") || "").trim();
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-            if (!stepsError && steps && steps.length > 0) {
-                // 3.2 จับคู่ ID ของโปรเจกต์ใหม่ เข้ากับ ขั้นตอนทั้ง 17 ขั้นตอน
-                const milestonesToInsert = steps.map((step) => ({
-                    project_id: newProject.id,
-                    step_id: step.id,
-                    sla_status: 'On-track' // เริ่มต้นให้เป็นสถานะปกติทั้งหมด
-                }));
+    let query = supabaseAdmin
+      .from("projects")
+      .select("*, current_stage:project_stages!projects_current_stage_id_fkey(id, name, code, order_index, status, sla_status, started_at, due_at, owner_role, metadata)", { count: "exact" })
+      .order("created_at", { ascending: false });
 
-                // 3.3 Insert ลงตาราง project_milestones รวดเดียว
-                await supabaseAdmin.from('project_milestones').insert(milestonesToInsert);
-            }
-        }
-
-        // 4. ส่งข้อมูลโปรเจกต์ใหม่กลับไปให้ Frontend
-        return NextResponse.json({
-            success: true,
-            project: newProject,
-            message: 'สร้างโปรเจกต์และกาง Milestone สำเร็จ!'
-        }, { status: 201 });
-
-    } catch (error: any) {
-        console.error('Create Project API Error:', error.message);
-        return NextResponse.json(
-            { error: 'เกิดข้อผิดพลาดในการสร้างโปรเจกต์: ' + error.message },
-            { status: 500 }
-        );
+    if (search) {
+      const pattern = `%${search.replace(/[,%]/g, " ")}%`;
+      query = query.or(`customer_code.ilike.${pattern},customer_name.ilike.${pattern}`);
     }
+
+    const { data, error, count } = await query.range(from, to);
+
+    if (error) throw error;
+
+    const projects = data || [];
+    const summary = projects.reduce(
+      (acc: any, project: any) => {
+        const stage = Array.isArray(project.current_stage) ? project.current_stage[0] : project.current_stage;
+        const stageCode = stage?.code || "NO_STAGE";
+        acc.total += 1;
+        acc.byStage[stageCode] = acc.byStage[stageCode] || {
+          code: stageCode,
+          name: stage?.name || "No stage",
+          total: 0,
+          active: 0,
+          completed: 0,
+          blocked: 0,
+          nearSla: 0,
+          overSla: 0,
+        };
+        acc.byStage[stageCode].total += 1;
+        if (project.status === "COMPLETED") {
+          acc.completed += 1;
+          acc.byStage[stageCode].completed += 1;
+        } else {
+          acc.active += 1;
+          acc.byStage[stageCode].active += 1;
+        }
+        if (stage?.status === "BLOCKED") {
+          acc.blocked += 1;
+          acc.byStage[stageCode].blocked += 1;
+        }
+        if (stage?.sla_status === "NEAR_SLA" || project.sla_status === "NEAR_SLA") {
+          acc.nearSla += 1;
+          acc.byStage[stageCode].nearSla += 1;
+        }
+        if (stage?.sla_status === "OVER_SLA" || project.sla_status === "OVER_SLA") {
+          acc.overSla += 1;
+          acc.byStage[stageCode].overSla += 1;
+        }
+        return acc;
+      },
+      { total: 0, active: 0, completed: 0, blocked: 0, nearSla: 0, overSla: 0, byStage: {} },
+    );
+
+    return NextResponse.json({
+      projects,
+      summary: {
+        ...summary,
+        byStage: Object.values(summary.byStage),
+      },
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+      },
+    });
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    console.error("Projects API Error:", message, error);
+    return NextResponse.json({ error: `Fetch projects failed: ${message}` }, { status: 500 });
+  }
 }

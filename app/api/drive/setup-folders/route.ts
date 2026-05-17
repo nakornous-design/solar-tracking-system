@@ -1,25 +1,22 @@
 import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
+import { createClient } from '@supabase/supabase-js';
+import { createProjectFolders } from '@/services/drive/folderEngine';
+import { authorizeRequest } from '@/lib/api-permissions';
+import { googleDriveAuthErrorMessage, isGoogleDriveAuthError } from '@/lib/google-drive';
 
-// 1. ตั้งค่าการยืนยันตัวตนด้วย Google OAuth2 (สวมรอยเป็นผู้ใช้จริง)
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_OAUTH_CLIENT_ID,
-  process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-  "https://developers.google.com/oauthplayground"
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
-
-oauth2Client.setCredentials({
-  refresh_token: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
-});
-
-const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { customerCode } = body;
+    const permission = await authorizeRequest(supabaseAdmin, request, ['admin', 'ops', 'sales', 'sbc']);
+    if (!permission.ok) return permission.response;
 
-    // ตรวจสอบว่ามีการส่ง Customer Code มาหรือไม่
+    const body = await request.json();
+    const { customerCode, projectId } = body;
+
     if (!customerCode) {
       return NextResponse.json(
         { error: 'Bad Request: Missing customerCode' }, 
@@ -27,62 +24,48 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. สร้าง Root Folder โดยใช้ชื่อเป็น Customer Code
-    const parentFolderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID;
-    const rootFolderMetadata: any = {
-      name: customerCode,
-      mimeType: 'application/vnd.google-apps.folder',
-    };
-    
-    // หากมีการระบุ Parent Folder ให้ไปสร้างไว้ในนั้น
-    if (parentFolderId) {
-      rootFolderMetadata.parents = [parentFolderId];
+    let folderCustomerCode = customerCode;
+
+    if (projectId) {
+      const { data: existingProject, error: existingProjectError } = await supabaseAdmin
+        .from('projects')
+        .select('customer_code, google_drive_folder_id, drive_metadata')
+        .eq('id', projectId)
+        .single();
+
+      if (existingProjectError || !existingProject) {
+        return NextResponse.json({ error: 'Project was not found.' }, { status: 404 });
+      }
+
+      folderCustomerCode = existingProject.customer_code || customerCode;
+
+      if (existingProject?.google_drive_folder_id) {
+        return NextResponse.json({
+          success: true,
+          created: false,
+          rootFolderId: existingProject.google_drive_folder_id,
+          driveMetadata: existingProject.drive_metadata || {},
+          subFolders: existingProject.drive_metadata?.folders || {},
+        }, { status: 200 });
+      }
     }
 
-    const rootFolder = await drive.files.create({
-      requestBody: rootFolderMetadata,
-      fields: 'id',
-    });
+    const result = await createProjectFolders(supabaseAdmin, folderCustomerCode, projectId);
 
-    const rootFolderId = rootFolder.data.id;
-
-    // 3. กำหนดรายชื่อ 6 โฟลเดอร์ย่อยตามโครงสร้างที่ออกแบบไว้
-    const subFolders = [
-      "01_Sales_Commercial",
-      "02_Survey_TSSR",
-      "03_Loan_Documents",
-      "04_Installation_Photos",
-      "05_Site_Folder_Handover",
-      "06_Billing_Finance"
-    ];
-
-    // 4. วนลูปเพื่อสร้างโฟลเดอร์ย่อยทั้งหมดเข้าไปใน Root Folder
-    const createdSubFolders: any[] = [];
-    
-    // ใช้ Promise.all เพื่อสร้างโฟลเดอร์พร้อมกัน (เร็วกว่าสร้างทีละอัน)
-    await Promise.all(
-      subFolders.map(async (folderName) => {
-        const sub = await drive.files.create({
-          requestBody: {
-            name: folderName,
-            mimeType: 'application/vnd.google-apps.folder',
-            parents: [rootFolderId!],
-          },
-          fields: 'id, name',
-        });
-        createdSubFolders.push(sub.data);
-      })
-    );
-
-    // 5. ส่ง ID ของ Root Folder กลับไป เพื่อนำไปอัปเดตลงตาราง projects ใน Supabase
     return NextResponse.json({
       success: true,
-      rootFolderId: rootFolderId,
-      subFolders: createdSubFolders
+      created: true,
+      ...result
     }, { status: 200 });
 
   } catch (error: any) {
     console.error('Google Drive API Error:', error.message);
+    if (isGoogleDriveAuthError(error)) {
+      return NextResponse.json(
+        { error: googleDriveAuthErrorMessage() },
+        { status: 401 },
+      );
+    }
     return NextResponse.json(
       { error: 'Internal Server Error: Failed to create folders - ' + error.message }, 
       { status: 500 }

@@ -1,40 +1,52 @@
-import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { authorizeRequest } from "@/lib/api-permissions";
+import { createDriveClient, googleDriveAuthErrorMessage, isGoogleDriveAuthError } from "@/lib/google-drive";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
 
 export async function GET(request: Request) {
+  const permission = await authorizeRequest(supabaseAdmin, request, [
+    "admin",
+    "supervisor",
+    "ops",
+    "sales",
+    "engineer",
+    "finance",
+    "qa",
+    "contractor",
+    "rcm",
+    "sbc",
+  ]);
+  if (!permission.ok) return permission.response;
+
   const { searchParams } = new URL(request.url);
-  const fileId = searchParams.get('fileId');
+  const fileId = searchParams.get("fileId");
 
-  if (!fileId) return new NextResponse('Missing fileId', { status: 400 });
-
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_OAUTH_CLIENT_ID,
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-    "https://developers.google.com/oauthplayground"
-  );
-  oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_OAUTH_REFRESH_TOKEN });
-  
-  const drive = google.drive({ version: 'v3', auth: oauth2Client });
+  if (!fileId) return new NextResponse("Missing fileId", { status: 400 });
 
   try {
-    // ดึงข้อมูลไฟล์แบบ Media (ดาวน์โหลดเนื้อหาไฟล์)
-    const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
-    
-    if (!res.data) return new NextResponse('Not found', { status: 404 });
-    
-    // ดึง MimeType เพื่อบอก Browser ว่าเป็นรูปประเภทไหน
-    const fileMetadata = await drive.files.get({ fileId, fields: 'mimeType' });
-    const mimeType = fileMetadata.data.mimeType || 'image/jpeg';
-    
-    // ส่งกลับไปเป็นภาพโดยตรง พร้อม Cache 1 วัน
+    const drive = createDriveClient();
+    const res = await drive.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
+
+    if (!res.data) return new NextResponse("Not found", { status: 404 });
+
+    const fileMetadata = await drive.files.get({ fileId, fields: "mimeType" });
+    const mimeType = fileMetadata.data.mimeType || "image/jpeg";
+
     return new NextResponse(res.data as ArrayBuffer, {
       headers: {
-        'Content-Type': mimeType,
-        'Cache-Control': 'public, max-age=86400',
+        "Content-Type": mimeType,
+        "Cache-Control": "private, max-age=300",
       },
     });
-  } catch (error: any) {
-    console.error('Image Proxy Error:', error.message);
-    return new NextResponse('Error loading image', { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Image Proxy Error:", message);
+    if (isGoogleDriveAuthError(error)) return new NextResponse(googleDriveAuthErrorMessage(), { status: 401 });
+    return new NextResponse("Error loading image", { status: 500 });
   }
 }

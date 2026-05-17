@@ -17,6 +17,92 @@ body {
   font-family: var(--font-sans);
 }
 
+@keyframes active-stage-ping {
+  75%,
+  100% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
+
+@keyframes active-stage-glow {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.active-stage-marker {
+  animation: active-stage-glow 1.9s ease-in-out infinite;
+}
+
+.active-stage-marker::before,
+.active-stage-marker::after {
+  border-radius: 9999px;
+  content: "";
+  inset: -3px;
+  position: absolute;
+}
+
+.active-stage-marker::before {
+  animation: active-stage-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.active-stage-marker::after {
+  animation: active-stage-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+  animation-delay: 0.55s;
+}
+
+.active-stage-marker.is-on-track::before,
+.active-stage-marker.is-on-track::after {
+  border: 2px solid rgba(16, 185, 129, 0.32);
+}
+
+.active-stage-marker.is-overdue::before,
+.active-stage-marker.is-overdue::after {
+  border: 2px solid rgba(244, 63, 94, 0.34);
+}
+
+.active-stage-marker.is-near-sla::before,
+.active-stage-marker.is-near-sla::after {
+  border: 2px solid rgba(245, 158, 11, 0.34);
+}
+
+@keyframes execution-rail-sheen {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.execution-rail-fill {
+  overflow: hidden;
+  position: relative;
+}
+
+.execution-rail-fill::after {
+  animation: execution-rail-sheen 3.8s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  content: "";
+  inset: 0;
+  position: absolute;
+  width: 36%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active-stage-marker,
+  .active-stage-marker::before,
+  .active-stage-marker::after,
+  .execution-rail-fill::after {
+    animation: none;
+  }
+}
+
 /* Custom Scrollbar for a sleek look */
 ::-webkit-scrollbar {
   width: 8px;
