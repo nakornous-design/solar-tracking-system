@@ -659,6 +659,8 @@ export default function Dashboard() {
   const [dashboardStageFilter, setDashboardStageFilter] = useState("ALL");
   const [dashboardProjectPage, setDashboardProjectPage] = useState(1);
   const [dashboardProjectsPerPage, setDashboardProjectsPerPage] = useState(12);
+  const [dashboardProjectSearch, setDashboardProjectSearch] = useState("");
+  const [dashboardProvinceFilter, setDashboardProvinceFilter] = useState("ALL");
   const [stageRailDragging, setStageRailDragging] = useState(false);
   const [stageActionModal, setStageActionModal] = useState<{
     type: 'QA' | 'BILLING';
@@ -3383,11 +3385,20 @@ export default function Dashboard() {
     ? dashboardPipelineGroups.find((group: any) => group.codes.includes(selectedDashboardStageCode) || group.stages.some((stage: any) => stage.code === selectedDashboardStageCode))
     : null;
   const dashboardStageProjects = selectedDashboardStage?.projects || selectedDashboardGroup?.projects || projects;
-  const dashboardProjectPageCount = Math.max(1, Math.ceil(dashboardStageProjects.length / dashboardProjectsPerPage));
+  const dashboardProvinceOptions = Array.from(new Set(projects.map((project: any) => project.customer_intake?.siteProvince).filter(Boolean))).sort((a: any, b: any) => String(a).localeCompare(String(b), "th"));
+  const normalizedDashboardProjectSearch = dashboardProjectSearch.trim().toLowerCase();
+  const filteredDashboardStageProjects = dashboardStageProjects.filter((project: any) => {
+    const matchesSearch = normalizedDashboardProjectSearch
+      ? [project.customer_code, project.customer_name].filter(Boolean).join(" ").toLowerCase().includes(normalizedDashboardProjectSearch)
+      : true;
+    const matchesProvince = dashboardProvinceFilter === "ALL" || project.customer_intake?.siteProvince === dashboardProvinceFilter;
+    return matchesSearch && matchesProvince;
+  });
+  const dashboardProjectPageCount = Math.max(1, Math.ceil(filteredDashboardStageProjects.length / dashboardProjectsPerPage));
   const normalizedDashboardProjectPage = Math.min(dashboardProjectPage, dashboardProjectPageCount);
-  const dashboardProjectStartIndex = dashboardStageProjects.length === 0 ? 0 : (normalizedDashboardProjectPage - 1) * dashboardProjectsPerPage;
-  const dashboardProjectEndIndex = Math.min(dashboardStageProjects.length, dashboardProjectStartIndex + dashboardProjectsPerPage);
-  const pagedDashboardStageProjects = dashboardStageProjects.slice(dashboardProjectStartIndex, dashboardProjectEndIndex);
+  const dashboardProjectStartIndex = filteredDashboardStageProjects.length === 0 ? 0 : (normalizedDashboardProjectPage - 1) * dashboardProjectsPerPage;
+  const dashboardProjectEndIndex = Math.min(filteredDashboardStageProjects.length, dashboardProjectStartIndex + dashboardProjectsPerPage);
+  const pagedDashboardStageProjects = filteredDashboardStageProjects.slice(dashboardProjectStartIndex, dashboardProjectEndIndex);
   const dashboardStageRiskTotal = dashboardStageDistribution.reduce((sum: number, stage: any) => sum + stage.blocked + stage.nearSla + stage.overSla, 0);
   const openRiskCount = exceptions.length + pendingApprovals.length + riskyStages.length + documentRisks.length;
   const highRiskExceptions = exceptions.filter((exception) => exception.severity === 'HIGH' || exception.severity === 'CRITICAL').length;
@@ -3992,8 +4003,8 @@ export default function Dashboard() {
                           const riskCount = group.blocked + group.nearSla + group.overSla;
                           const stageNames = group.stages.map((stage: any) => stage.name).filter(Boolean).join(" / ");
                           const toneClass = group.tone === "amber" ? "border-amber-200 bg-amber-50 text-amber-700" : group.tone === "orange" ? "border-orange-200 bg-orange-50 text-orange-700" : group.tone === "rose" ? "border-rose-200 bg-rose-50 text-rose-700" : group.tone === "teal" ? "border-teal-200 bg-teal-50 text-teal-700" : group.tone === "cyan" ? "border-cyan-200 bg-cyan-50 text-cyan-700" : group.tone === "lime" ? "border-lime-200 bg-lime-50 text-lime-700" : group.tone === "sky" ? "border-sky-200 bg-sky-50 text-sky-700" : "border-slate-200 bg-slate-50 text-slate-700";
-                          const gradientClass = group.tone === "amber" ? "from-amber-400 to-orange-500" : group.tone === "orange" ? "from-orange-400 to-rose-500" : group.tone === "rose" ? "from-rose-400 to-pink-500" : group.tone === "teal" ? "from-teal-400 to-emerald-500" : group.tone === "cyan" ? "from-cyan-400 to-sky-500" : group.tone === "lime" ? "from-lime-400 to-emerald-500" : group.tone === "sky" ? "from-sky-400 to-cyan-500" : "from-slate-400 to-slate-600";
-                          const surfaceGradientClass = group.tone === "amber" ? "from-amber-100 via-orange-50 to-orange-100/70" : group.tone === "orange" ? "from-orange-100 via-rose-50 to-rose-100/70" : group.tone === "rose" ? "from-rose-100 via-pink-50 to-pink-100/70" : group.tone === "teal" ? "from-teal-100 via-emerald-50 to-emerald-100/70" : group.tone === "cyan" ? "from-cyan-100 via-sky-50 to-sky-100/70" : group.tone === "lime" ? "from-lime-100 via-emerald-50 to-emerald-100/70" : group.tone === "sky" ? "from-sky-100 via-cyan-50 to-cyan-100/70" : "from-slate-100 via-slate-50 to-slate-200/70";
+                          const iconToneClass = group.tone === "amber" ? "text-amber-600" : group.tone === "orange" ? "text-orange-600" : group.tone === "rose" ? "text-rose-600" : group.tone === "teal" ? "text-teal-600" : group.tone === "cyan" ? "text-cyan-600" : group.tone === "lime" ? "text-lime-700" : group.tone === "sky" ? "text-sky-600" : "text-slate-600";
+                          const surfaceGradientClass = group.tone === "amber" ? "from-amber-200/80 via-amber-50 to-orange-100/80" : group.tone === "orange" ? "from-orange-200/75 via-orange-50 to-rose-100/80" : group.tone === "rose" ? "from-rose-200/75 via-rose-50 to-pink-100/80" : group.tone === "teal" ? "from-teal-200/75 via-teal-50 to-emerald-100/80" : group.tone === "cyan" ? "from-cyan-200/75 via-cyan-50 to-sky-100/80" : group.tone === "lime" ? "from-lime-200/75 via-lime-50 to-emerald-100/80" : group.tone === "sky" ? "from-sky-200/75 via-sky-50 to-cyan-100/80" : "from-slate-200/80 via-slate-50 to-slate-200/80";
                           const visual = stageVisual(group.stages[0] || { code: group.key });
                           return (
                             <div key={group.key} className="relative h-full">
@@ -4003,17 +4014,17 @@ export default function Dashboard() {
                                 setDashboardStageFilter(isSelected ? "ALL" : group.key);
                                 setDashboardProjectPage(1);
                               }}
-                              className={`relative h-[220px] w-full overflow-hidden rounded-xl border px-3 py-3 text-left shadow-sm shadow-slate-300/30 transition-all ${isInSelectedFlow ? 'border-slate-950 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-md ring-2 ring-slate-950/20' : count === 0 ? `border-slate-300/80 bg-gradient-to-br ${surfaceGradientClass} text-slate-500 hover:border-slate-400` : `border-slate-300/80 bg-gradient-to-br ${surfaceGradientClass} hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md hover:shadow-slate-300/40`}`}
+                              title={`${group.label} (${count} projects)`}
+                              className={`${count ? 'group' : ''} relative h-[220px] w-full cursor-pointer overflow-hidden rounded-xl border px-3 py-3 text-left shadow-sm shadow-slate-300/30 transition-all duration-200 ${isInSelectedFlow ? 'border-slate-950 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-md ring-2 ring-slate-950/20 hover:-translate-y-1 hover:shadow-xl' : count === 0 ? `border-slate-300/80 bg-gradient-to-br ${surfaceGradientClass} text-slate-500 hover:border-slate-400 hover:ring-1 hover:ring-slate-200` : `border-slate-300/80 bg-gradient-to-br ${surfaceGradientClass} hover:-translate-y-1 hover:border-slate-400 hover:shadow-lg hover:shadow-slate-300/50`}`}
                             >
-                              <div className={`pointer-events-none absolute -bottom-16 -right-14 h-44 w-44 rounded-full bg-gradient-to-br ${isInSelectedFlow ? 'from-white/25 via-white/10 to-transparent' : gradientClass} ${isInSelectedFlow ? 'opacity-30' : 'opacity-[0.16]'} blur-[2px]`}></div>
-                              <div className={`pointer-events-none absolute -bottom-10 -right-8 ${isInSelectedFlow ? 'text-white/10' : 'text-white/55'} [&_svg]:h-36 [&_svg]:w-36`}>
-                                <StageIcon name={visual.icon} />
+                              <div className={`pointer-events-none absolute -bottom-4 -right-3 ${isInSelectedFlow ? 'text-white/20' : iconToneClass} opacity-28 transition-all duration-500 [mask-image:linear-gradient(135deg,black_0%,rgba(0,0,0,0.72)_42%,transparent_88%)] group-hover:-translate-x-1 group-hover:-translate-y-1 group-hover:scale-110 group-hover:opacity-36 [&_svg]:h-28 [&_svg]:w-28`}>
+                                <StageIcon name={visual.icon} className="h-28 w-28" />
                               </div>
                               <div className="absolute inset-x-0 top-0 h-px bg-white/80"></div>
                               <div className="relative z-10 flex items-start justify-between gap-3 pt-1">
                                 <div className="min-w-0 flex-1">
-                                  <span className={`mb-2 flex h-9 w-9 items-center justify-center rounded-lg border ${isInSelectedFlow ? 'border-white/20 bg-white/10 text-white' : toneClass}`}>
-                                    <StageIcon name={visual.icon} />
+                                  <span className={`mb-2 flex h-16 w-16 origin-center items-center justify-center drop-shadow-lg transition-all duration-300 group-hover:-translate-y-0.5 group-hover:scale-110 group-hover:drop-shadow-xl ${isInSelectedFlow ? 'text-white' : iconToneClass}`}>
+                                    <StageIcon name={visual.icon} className="h-14 w-14 transition-transform duration-300 ease-out group-hover:scale-110" />
                                   </span>
                                   <p className={`line-clamp-2 min-h-[34px] text-[13px] font-extrabold leading-4 ${isInSelectedFlow ? 'text-white' : 'text-slate-950'}`}>{group.label}</p>
                                   <p className={`mt-1 line-clamp-1 text-[10px] font-bold ${isSelected ? 'text-white/50' : 'text-slate-400'}`}>{stageNames || 'ไม่มี stage ย่อย'}</p>
@@ -4029,16 +4040,12 @@ export default function Dashboard() {
                                   style={{ width: count ? `${Math.max(5, percent)}%` : '5%' }}
                                 ></div>
                               </div>
-                              <div className={`relative z-10 mt-3 flex min-h-[48px] flex-wrap content-start gap-1.5 text-[10px] font-bold ${isInSelectedFlow ? 'text-white/75' : 'text-slate-500'}`}>
+                              <div className={`relative z-10 mt-3 flex min-h-[34px] flex-wrap content-start gap-1.5 text-[10px] font-bold ${isInSelectedFlow ? 'text-white/75' : 'text-slate-500'}`}>
                                 <span className={`rounded border px-1.5 py-0.5 ${isInSelectedFlow ? 'border-white/15 bg-white/10' : 'border-slate-200 bg-white/70'}`}>Active {group.active}</span>
                                 {group.completed > 0 && <span className={`rounded border px-1.5 py-0.5 ${isInSelectedFlow ? 'border-white/15 bg-white/10' : 'border-emerald-200 bg-white/70 text-emerald-700'}`}>Done {group.completed}</span>}
                                 {group.blocked > 0 && <span className={`rounded border px-1.5 py-0.5 ${isInSelectedFlow ? 'border-white/15 bg-white/10' : 'border-rose-200 bg-white/70 text-rose-700'}`}>Blocked {group.blocked}</span>}
                                 {group.overSla > 0 && <span className={`rounded border px-1.5 py-0.5 ${isInSelectedFlow ? 'border-white/15 bg-white/10' : 'border-rose-200 bg-white/70 text-rose-700'}`}>Over {group.overSla}</span>}
                                 {group.nearSla > 0 && <span className={`rounded border px-1.5 py-0.5 ${isInSelectedFlow ? 'border-white/15 bg-white/10' : 'border-amber-200 bg-white/70 text-amber-700'}`}>Near {group.nearSla}</span>}
-                              </div>
-                              <div className="relative z-10 mt-2 flex items-center justify-between gap-2">
-                                <p className={`text-[10px] font-bold ${isInSelectedFlow ? 'text-white/50' : 'text-slate-500'}`}>{count ? 'click to filter' : 'empty group'}</p>
-                                {isInSelectedFlow && <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/80">FILTER</span>}
                               </div>
                             </button>
                             {false && groupIndex < dashboardPipelineGroups.length - 1 && (
@@ -4055,7 +4062,7 @@ export default function Dashboard() {
                       const expandedGroup = selectedDashboardGroup || selectedDashboardStageGroup;
                       if (!expandedGroup) return null;
                       return (
-                      <div className="mt-4 rounded-xl border border-slate-300/80 bg-slate-200/50 p-4">
+                      <div className="mt-4 rounded-xl border border-slate-300/80 bg-slate-100/80 p-4">
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <div>
                             <p className="text-[13px] font-black text-slate-950">{expandedGroup.label}</p>
@@ -4063,59 +4070,56 @@ export default function Dashboard() {
                           </div>
                           <span className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700">{expandedGroup.stages.length} steps</span>
                         </div>
-                        <div className="flex flex-wrap items-stretch gap-2">
+                        <div className="scrollbar-none flex items-center overflow-x-auto pb-1">
                           {expandedGroup.stages.map((stage: any, index: number) => {
                             const visual = stageVisual(stage);
+                            const stageSolidClass = stageSolidIconClass(stage);
                             const isStageSelected = selectedDashboardStageCode === stage.code;
                             const stageCount = stage.projects.length;
                             const stagePercent = Math.round((stageCount / dashboardStageTotal) * 100);
                             const stageRiskCount = stage.blocked + stage.nearSla + stage.overSla;
+                            const stageProgressClass = stageRiskCount ? "bg-rose-500" : stageCount ? "bg-emerald-500" : "bg-slate-300";
+                            const stageCardClass = `${stageCount ? "group/stage" : ""} relative flex h-[112px] w-[250px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-lg border bg-white px-3 py-2.5 text-left shadow-sm shadow-slate-200/70 transition-all duration-200 ${isStageSelected ? "border-emerald-400 ring-2 ring-emerald-100" : stageCount === 0 ? "border-slate-200 hover:border-slate-300 hover:ring-1 hover:ring-slate-200" : "border-slate-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md hover:shadow-slate-300/50"}`;
                             return (
-                              <div key={stage.code} className="flex items-center gap-2">
+                              <div key={stage.code} className="flex shrink-0 items-center">
                               <button
                                 type="button"
                                 onClick={() => {
                                   setDashboardStageFilter(isStageSelected ? expandedGroup.key : `stage:${stage.code}`);
                                   setDashboardProjectPage(1);
                                 }}
-                                className={`relative h-[150px] w-[300px] overflow-hidden rounded-lg border px-3 py-3 text-left shadow-sm shadow-slate-300/30 transition-all ${isStageSelected ? 'border-slate-950 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-md' : `border-slate-300/80 bg-gradient-to-br ${visual.gradient.replace("via-white", "via-slate-50").replace("to-white", "to-slate-100")} hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md hover:shadow-slate-300/40`}`}
+                                className={stageCardClass}
                               >
-                                <div className={`pointer-events-none absolute -bottom-12 -right-10 h-32 w-32 rounded-full bg-gradient-to-br ${visual.gradient} ${isStageSelected ? 'opacity-30' : 'opacity-[0.18]'}`}></div>
-                                <div className={`pointer-events-none absolute -bottom-8 -right-6 ${isStageSelected ? 'text-white/10' : 'text-white/60'} [&_svg]:h-28 [&_svg]:w-28`}>
-                                  <StageIcon name={visual.icon} />
-                                </div>
-                                <div className="relative z-10 flex items-start justify-between gap-3">
+                                <div className="flex items-start justify-between gap-3">
                                   <div className="flex min-w-0 gap-2">
-                                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${isStageSelected ? 'border-white/20 bg-white/10 text-white' : visual.iconClass}`}>
+                                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border shadow-sm transition-transform duration-200 ${stageCount ? stageSolidClass : "border-slate-200 bg-slate-100 text-slate-400"} group-hover/stage:scale-110 [&_svg]:h-5 [&_svg]:w-5`}>
                                     <StageIcon name={visual.icon} />
                                   </span>
                                   <div className="min-w-0">
-                                    <p className={`truncate text-[12px] font-extrabold ${isStageSelected ? 'text-white' : 'text-slate-950'}`}>{stage.name}</p>
-                                    <p className={`mt-1 font-mono text-[9px] font-bold uppercase ${isStageSelected ? 'text-white/50' : 'text-slate-400'}`}>{index + 1}. {stage.code}</p>
+                                    <p className="truncate text-[11px] font-black text-slate-950">{stage.name}</p>
+                                    <p className="mt-1 font-mono text-[8px] font-bold uppercase text-slate-400">{index + 1}. {stage.code}</p>
                                   </div>
                                   </div>
                                   <div className="shrink-0 text-right">
-                                    <p className={`text-xl font-black ${isStageSelected ? 'text-white' : stageCount ? 'text-slate-950' : 'text-slate-300'}`}>{stageCount}</p>
-                                    <p className={`text-[10px] font-bold ${isStageSelected ? 'text-white/55' : 'text-slate-400'}`}>{stagePercent}%</p>
+                                    <p className={`text-xl font-black leading-none ${stageCount ? 'text-slate-950' : 'text-slate-300'}`}>{stageCount}</p>
+                                    <p className="mt-1 text-[9px] font-bold text-slate-400">{stagePercent}%</p>
                                   </div>
                                 </div>
-                                <div className={`relative z-10 mt-3 h-2 overflow-hidden rounded-full ${isStageSelected ? 'bg-white/15' : 'bg-slate-200/80'}`}>
+                                <div className="mt-auto h-1.5 overflow-hidden rounded-full bg-slate-100">
                                   <div
-                                    className={`${stageRiskCount ? 'bg-blue-950' : stageCount ? 'bg-emerald-500' : 'bg-slate-300'} h-full rounded-full`}
+                                    className={`${stageProgressClass} h-full rounded-full`}
                                     style={{ width: stageCount ? `${Math.max(5, stagePercent)}%` : '5%' }}
                                   ></div>
                                 </div>
-                                <div className={`relative z-10 mt-3 flex min-h-[24px] flex-wrap content-start gap-1.5 text-[10px] font-bold ${isStageSelected ? 'text-white/75' : 'text-slate-500'}`}>
-                                  <span className={`rounded border px-1.5 py-0.5 ${isStageSelected ? 'border-white/15 bg-white/10' : 'border-slate-200 bg-slate-50'}`}>Active {stage.active}</span>
-                                  {stage.completed > 0 && <span className={`rounded border px-1.5 py-0.5 ${isStageSelected ? 'border-white/15 bg-white/10' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>Done {stage.completed}</span>}
-                                  {stage.blocked > 0 && <span className={`rounded border px-1.5 py-0.5 ${isStageSelected ? 'border-white/15 bg-white/10' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>Blocked {stage.blocked}</span>}
-                                  {stage.overSla > 0 && <span className={`rounded border px-1.5 py-0.5 ${isStageSelected ? 'border-white/15 bg-white/10' : 'border-rose-200 bg-white text-rose-700'}`}>Over {stage.overSla}</span>}
-                                  {stage.nearSla > 0 && <span className={`rounded border px-1.5 py-0.5 ${isStageSelected ? 'border-white/15 bg-white/10' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>Near {stage.nearSla}</span>}
+                                <div className="mt-2 flex items-center gap-1.5 text-[9px] font-bold">
+                                  <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-slate-600">Active {stage.active}</span>
+                                  {stageRiskCount > 0 && <span className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-rose-700">Risk {stageRiskCount}</span>}
                                 </div>
                               </button>
-                              {false && (
-                                <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[15px] font-black text-slate-400 md:flex">
-                                  →
+                              {index < expandedGroup.stages.length - 1 && (
+                                <div className="flex w-9 shrink-0 items-center">
+                                  <span className="h-0.5 flex-1 rounded-full bg-slate-300"></span>
+                                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
                                 </div>
                               )}
                               </div>
@@ -4136,6 +4140,27 @@ export default function Dashboard() {
                         <p className="mt-1 text-[11px] font-medium text-slate-500">Customer, พื้นที่ และตำแหน่งบน workflow ในบรรทัดเดียว</p>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2">
+                        <input
+                          type="search"
+                          value={dashboardProjectSearch}
+                          onChange={(event) => {
+                            setDashboardProjectSearch(event.target.value);
+                            setDashboardProjectPage(1);
+                          }}
+                          placeholder="Search code / customer"
+                          className="h-9 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-[11px] font-bold text-slate-700 outline-none placeholder:text-slate-400 focus:border-emerald-400 sm:w-[220px]"
+                        />
+                        <select
+                          value={dashboardProvinceFilter}
+                          onChange={(event) => {
+                            setDashboardProvinceFilter(event.target.value);
+                            setDashboardProjectPage(1);
+                          }}
+                          className="h-9 w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-[11px] font-bold text-slate-700 outline-none focus:border-emerald-400 sm:w-[170px]"
+                        >
+                          <option value="ALL">ทุกจังหวัด</option>
+                          {dashboardProvinceOptions.map((province: any) => <option key={province} value={province}>{province}</option>)}
+                        </select>
                         <select
                           value={dashboardProjectsPerPage}
                           onChange={(event) => {
@@ -4146,11 +4171,13 @@ export default function Dashboard() {
                         >
                           {[10, 12, 20, 50].map((size) => <option key={size} value={size}>{size} / หน้า</option>)}
                         </select>
-                        {dashboardStageFilter !== "ALL" && (
+                        {(dashboardStageFilter !== "ALL" || dashboardProjectSearch.trim() || dashboardProvinceFilter !== "ALL") && (
                           <button
                             type="button"
                             onClick={() => {
                               setDashboardStageFilter("ALL");
+                              setDashboardProjectSearch("");
+                              setDashboardProvinceFilter("ALL");
                               setDashboardProjectPage(1);
                             }}
                             className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100"
@@ -4170,7 +4197,7 @@ export default function Dashboard() {
                         <span className="text-right">SLA</span>
                       </div>
                       <div className="divide-y divide-slate-200">
-                      {dashboardStageProjects.length === 0 ? (
+                      {filteredDashboardStageProjects.length === 0 ? (
                         <div className="px-4 py-10 text-center text-[12px] font-medium text-slate-400">ไม่มี project ใน filter นี้</div>
                       ) : pagedDashboardStageProjects.map((project: any) => {
                         const stage = Array.isArray(project.current_stage) ? project.current_stage[0] : project.current_stage;
@@ -4217,7 +4244,7 @@ export default function Dashboard() {
                     </div>
                     <div className="mt-3 flex flex-col gap-2 text-[11px] font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                       <span>
-                        แสดง {dashboardProjectStartIndex + (dashboardStageProjects.length ? 1 : 0)}-{dashboardProjectEndIndex} จาก {dashboardStageProjects.length} project
+                        แสดง {dashboardProjectStartIndex + (filteredDashboardStageProjects.length ? 1 : 0)}-{dashboardProjectEndIndex} จาก {filteredDashboardStageProjects.length} project
                       </span>
                       <div className="flex items-center gap-2">
                         <button
@@ -6332,11 +6359,14 @@ export default function Dashboard() {
                     <div className="min-w-0">
                       <button
                         type="button"
-                        onClick={() => setSelectedProject(null)}
+                        onClick={() => {
+                          setSelectedProject(null);
+                          setActiveTab("dashboard");
+                        }}
                         className="mb-3 inline-flex items-center gap-2 text-[12px] font-bold text-slate-500 transition-colors hover:text-slate-950"
                       >
                         <span className="text-[16px] leading-none">&larr;</span>
-                        Back to project list
+                        Back to Project Pipeline
                       </button>
                       <div className="flex flex-wrap items-center gap-3">
                         <h1 className="text-[28px] font-black leading-tight tracking-tight text-slate-950">{selectedProject.customer_code}</h1>
