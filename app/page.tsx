@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { apiFetch } from "../lib/api-client";
 import {
@@ -93,14 +93,17 @@ function normalizeStageOwnerRole(role?: string | null) {
   return aliases[key] || key;
 }
 
+function uniqueIds(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter(Boolean) as string[])];
+}
+
 function completionButtonLabel(stage: any) {
   const key = String(stage?.code || "").toUpperCase();
   const labels: Record<string, string> = {
-    QA: "Pass QA",
-    READY_FOR_INSTALL: "Complete Readiness",
-    CLOSURE: "Close Project",
+    CLOSURE: "ปิดโครงการ",
   };
-  return labels[key] || `Complete ${stageDisplay(stage).title}`;
+  if (labels[key]) return labels[key];
+  return "ไปขั้นตอนถัดไป";
 }
 
 function stageGateBlockers(stage: any) {
@@ -165,6 +168,39 @@ function nextActionToneClass(tone: string) {
   if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-800";
   if (tone === "risk") return "border-rose-200 bg-rose-50 text-rose-800";
   return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function summaryCardClass(tone: "emerald" | "amber" | "rose" | "blue" | "slate") {
+  const tones = {
+    emerald: "border-emerald-100 bg-gradient-to-br from-emerald-50/85 via-white to-white shadow-emerald-100/45",
+    amber: "border-amber-100 bg-gradient-to-br from-amber-50/85 via-white to-white shadow-amber-100/45",
+    rose: "border-rose-100 bg-gradient-to-br from-rose-50/85 via-white to-white shadow-rose-100/45",
+    blue: "border-blue-100 bg-gradient-to-br from-blue-50/70 via-white to-white shadow-blue-100/40",
+    slate: "border-slate-200/90 bg-gradient-to-br from-slate-50/75 via-white to-white shadow-slate-200/50",
+  };
+  return tones[tone];
+}
+
+function summaryIconClass(tone: "emerald" | "amber" | "rose" | "blue" | "slate") {
+  const tones = {
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-100 bg-amber-50 text-amber-700",
+    rose: "border-rose-100 bg-rose-50 text-rose-700",
+    blue: "border-blue-100 bg-blue-50 text-blue-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-600",
+  };
+  return tones[tone];
+}
+
+function summaryWatermarkClass(tone: "emerald" | "amber" | "rose" | "blue" | "slate") {
+  const tones = {
+    emerald: "text-emerald-500",
+    amber: "text-amber-500",
+    rose: "text-rose-500",
+    blue: "text-blue-500",
+    slate: "text-slate-400",
+  };
+  return tones[tone];
 }
 
 function gateVisualState(item: any) {
@@ -267,10 +303,33 @@ function timelineTimeLabel(value?: string | null) {
 function timelineActivityView(activity: any) {
   const action = String(activity?.action || "").toUpperCase();
   const afterStatus = String(activity?.after_state?.status || activity?.metadata?.status || "").toUpperCase();
+  const metadata = activity?.metadata || {};
+  const relatedChecklist = activity?.relatedChecklist || null;
+  const stageName = activity?.stageTitle || activity?.stageCode || "";
+  const itemName =
+    relatedChecklist?.label ||
+    relatedChecklist?.name ||
+    metadata.checklist_name ||
+    metadata.checklistName ||
+    metadata.checklist_label ||
+    metadata.checklistLabel ||
+    metadata.gate_name ||
+    metadata.gateName ||
+    metadata.gate_label ||
+    metadata.gateLabel ||
+    metadata.document_name ||
+    metadata.documentName ||
+    metadata.file_name ||
+    metadata.fileName ||
+    metadata.folder_name ||
+    metadata.folderName ||
+    metadata.name ||
+    metadata.title ||
+    "";
 
   if (action === "CHECKLIST_UPDATED" && afterStatus === "FAILED") {
     return {
-      title: "ตรวจแล้วไม่ผ่าน",
+      title: itemName || stageName || "Checklist",
       tone: "risk",
       badgeClass: "border-rose-200 bg-rose-50 text-rose-700",
     };
@@ -278,7 +337,7 @@ function timelineActivityView(activity: any) {
 
   if ((action === "CHECKLIST_UPDATED" && afterStatus === "PASSED") || action === "CHECKLIST_PASSED") {
     return {
-      title: "ตรวจแล้วผ่าน",
+      title: itemName || stageName || "Checklist",
       tone: "success",
       badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
     };
@@ -286,17 +345,97 @@ function timelineActivityView(activity: any) {
 
   if (action === "DOCUMENT_UPLOADED") {
     return {
-      title: "อัปโหลดเอกสารแล้ว",
+      title: itemName ? `\u0e2d\u0e31\u0e1b\u0e42\u0e2b\u0e25\u0e14\u0e40\u0e2d\u0e01\u0e2a\u0e32\u0e23: ${itemName}` : stageName ? `\u0e2d\u0e31\u0e1b\u0e42\u0e2b\u0e25\u0e14\u0e40\u0e2d\u0e01\u0e2a\u0e32\u0e23: ${stageName}` : "\u0e2d\u0e31\u0e1b\u0e42\u0e2b\u0e25\u0e14\u0e40\u0e2d\u0e01\u0e2a\u0e32\u0e23\u0e41\u0e25\u0e49\u0e27",
+      tone: "success",
+      badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
+  }
+
+  if (action.includes("PROJECT") && action.includes("CREATED")) {
+    return {
+      title: stageName ? `\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23: ${stageName}` : "\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23",
+      tone: "success",
+      badgeClass: "border-blue-200 bg-blue-50 text-blue-700",
+    };
+  }
+
+  if (action.includes("DRIVE") || action.includes("FOLDER")) {
+    return {
+      title: itemName ? `\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e42\u0e1f\u0e25\u0e40\u0e14\u0e2d\u0e23\u0e4c Drive: ${itemName}` : "\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e42\u0e1f\u0e25\u0e40\u0e14\u0e2d\u0e23\u0e4c Google Drive",
       tone: "success",
       badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
     };
   }
 
   return {
-    title: activityLabel(activity?.action),
+    title: stageName ? `${activityLabel(activity?.action)}: ${stageName}` : activityLabel(activity?.action),
     tone: "neutral",
     badgeClass: activityToneClass(activity?.action),
   };
+}
+function activityAuditIcon(activity: any) {
+  const action = String(activity?.action || "").toUpperCase();
+  const afterStatus = String(activity?.after_state?.status || activity?.metadata?.status || "").toUpperCase();
+  if (action.includes("PROJECT") && action.includes("CREATED")) return { icon: "folderPlus", className: "border-blue-100 bg-blue-50 text-blue-600" };
+  if (action.includes("TRANSITION") || action.includes("STAGE_CHANGED")) return { icon: "arrowRight", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
+  if ((action.includes("CHECKLIST") && afterStatus === "PASSED") || action.includes("CHECKLIST_PASSED")) return { icon: "check", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
+  if (action.includes("DOCUMENT_REJECTED")) return { icon: "fileWarning", className: "border-rose-100 bg-rose-50 text-rose-600" };
+  if (action.includes("DOCUMENT") && action.includes("UPLOAD")) return { icon: "fileUp", className: "border-blue-100 bg-blue-50 text-blue-600" };
+  if (action.includes("BLOCKED") || action.includes("FAIL")) return { icon: "alert", className: "border-rose-100 bg-rose-50 text-rose-600" };
+  if (action.includes("APPROVAL") && (action.includes("APPROVED") || action.includes("DECIDED"))) return { icon: "shield", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
+  if (action.includes("APPROVAL") || action.includes("OVERRIDE")) return { icon: "wait", className: "border-amber-100 bg-amber-50 text-amber-600" };
+  if (action.includes("DRIVE") || action.includes("FOLDER")) return { icon: "folderCheck", className: "border-emerald-100 bg-emerald-50 text-emerald-600" };
+  if (action.includes("PAYMENT") || action.includes("BILLING")) return { icon: "creditCard", className: "border-blue-100 bg-blue-50 text-blue-600" };
+  if (action.includes("QA")) return { icon: "shield", className: afterStatus === "FAILED" ? "border-rose-100 bg-rose-50 text-rose-600" : "border-emerald-100 bg-emerald-50 text-emerald-600" };
+  if (action.includes("SYSTEM")) return { icon: "bot", className: "border-slate-100 bg-slate-50 text-slate-500" };
+  return { icon: "activity", className: "border-slate-100 bg-slate-50 text-slate-500" };
+}
+
+function activityActorLine(activity: any) {
+  const metadata = activity?.metadata || {};
+  if (activity?.actor?.full_name || activity?.actor?.email) {
+    return `โดย ${activity.actor.full_name || activity.actor.email}${activity.actor.role ? ` • ${roleLabel(String(activity.actor.role))}` : ""}`;
+  }
+  const actorName = metadata.actor_name || metadata.actorName || metadata.user_name || metadata.userName || metadata.created_by_name || metadata.performed_by_name;
+  const actorRole = metadata.actor_role || metadata.actorRole || metadata.user_role || metadata.userRole || metadata.role || metadata.team;
+  const isSystem = metadata.system === true || String(metadata.actor_type || metadata.actorType || "").toLowerCase() === "system";
+  if (actorName) return `โดย ${actorName}${actorRole ? ` • ${roleLabel(String(actorRole))}` : ""}`;
+  if (isSystem) return "โดย ระบบ";
+  return "โดย ไม่ระบุผู้ทำรายการ";
+}
+
+function activityContextLine(activity: any) {
+  const metadata = activity?.metadata || {};
+  const action = String(activity?.action || "").toUpperCase();
+  const relatedChecklist = activity?.relatedChecklist || null;
+  const checklistCode = relatedChecklist?.code || metadata.checklist_code || metadata.checklistCode || metadata.gate_code || metadata.gateCode;
+  const status = relatedChecklist?.status || activity?.after_state?.status || metadata.status;
+  if (action.includes("CHECKLIST") || relatedChecklist) {
+    const parts = [
+      activity?.stageTitle || activity?.stageCode,
+      relatedChecklist?.is_required || metadata.is_required || metadata.required ? "\u0e1a\u0e31\u0e07\u0e04\u0e31\u0e1a" : null,
+      checklistCode ? `Gate: ${checklistCode}` : null,
+    ].filter(Boolean);
+    return parts.join(" • ");
+  }
+
+  const parts = [
+    activity?.stageTitle || activity?.stageCode,
+    metadata.file_name || metadata.fileName || metadata.document_name || metadata.documentName,
+    metadata.folder_name || metadata.folderName || metadata.name || metadata.title,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "";
+}
+
+function activityStatusBadge(activity: any) {
+  const action = String(activity?.action || "").toUpperCase();
+  const status = String(activity?.after_state?.status || activity?.metadata?.status || "").toUpperCase();
+  if (action.includes("BLOCKED")) return { label: "ถูกบล็อก", className: "border-rose-100 bg-rose-50 text-rose-700" };
+  if (action.includes("REJECTED") || status === "REJECTED" || status === "FAILED") return { label: "มีปัญหา", className: "border-rose-100 bg-rose-50 text-rose-700" };
+  if (action.includes("APPROVAL") && (action.includes("APPROVED") || status === "APPROVED")) return { label: "อนุมัติแล้ว", className: "border-emerald-100 bg-emerald-50 text-emerald-700" };
+  if (action.includes("APPROVAL") || status === "PENDING" || status === "PENDING_VERIFY") return { label: "รอตรวจสอบ", className: "border-amber-100 bg-amber-50 text-amber-700" };
+  if (action.includes("CHECKLIST") || status === "PASSED" || status === "VERIFIED") return { label: "สำเร็จ", className: "border-emerald-100 bg-emerald-50 text-emerald-700" };
+  return null;
 }
 
 function buildNextActionAssistant(input: {
@@ -460,7 +599,7 @@ function buildNextActionAssistant(input: {
       tone: "ready",
       status: "พร้อมไปต่อ",
       title: "ขั้นตอนนี้พร้อมไปต่อ",
-      suggestion: "กด Complete Stage เพื่อส่งงานไปขั้นตอนถัดไป",
+      suggestion: "กดไปขั้นตอนถัดไปเพื่อส่งงานไปขั้นตอนถัดไป",
     };
   }
 
@@ -507,6 +646,8 @@ export default function Dashboard() {
   const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
   const [rejectModal, setRejectModal] = useState<{ document: any; reason: string } | null>(null);
   const [showProjectDocumentControl, setShowProjectDocumentControl] = useState(false);
+  const [showProjectStageSequence, setShowProjectStageSequence] = useState(false);
+  const [stageRailOverflow, setStageRailOverflow] = useState({ left: false, right: false });
   const [stageActionLoading, setStageActionLoading] = useState<string | null>(null);
   const [checkingInStageId, setCheckingInStageId] = useState<string | null>(null);
   const [selectedException, setSelectedException] = useState<any | null>(null);
@@ -514,6 +655,7 @@ export default function Dashboard() {
   const [dashboardStageFilter, setDashboardStageFilter] = useState("ALL");
   const [dashboardProjectPage, setDashboardProjectPage] = useState(1);
   const [dashboardProjectsPerPage, setDashboardProjectsPerPage] = useState(12);
+  const [stageRailDragging, setStageRailDragging] = useState(false);
   const [stageActionModal, setStageActionModal] = useState<{
     type: 'QA' | 'BILLING';
     action: string;
@@ -532,6 +674,9 @@ export default function Dashboard() {
     title: string;
     reason: string;
   } | null>(null);
+  const stageRailRef = useRef<HTMLDivElement | null>(null);
+  const stageRailDragRef = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false, pointerId: null as number | null });
+  const suppressStageRailClickRef = useRef(false);
   const [approvalLoading, setApprovalLoading] = useState<string | null>(null);
   const [overrideModal, setOverrideModal] = useState<{ stage: any; reason: string } | null>(null);
   const [gateBlockModal, setGateBlockModal] = useState<{
@@ -635,6 +780,7 @@ export default function Dashboard() {
     setMilestones([]);
     setSelectedStageId(null);
     setSelectedDocument(null);
+    setShowProjectStageSequence(false);
     setSelectedException(null);
     setRejectModal(null);
     setStageActionModal(null);
@@ -2207,6 +2353,7 @@ export default function Dashboard() {
     setSelectedProject(project);
     setActiveTab('projects');
     setMilestones([]);
+    setShowProjectStageSequence(false);
     setLoadingMilestones(true);
 
     await withNetworkActivity("Loading project workflow", async () => {
@@ -2245,7 +2392,7 @@ export default function Dashboard() {
           .in('status', ['OPEN', 'ACKNOWLEDGED', 'IN_PROGRESS']),
         supabase
           .from('activity_logs')
-          .select('id, project_stage_id, action, reason, before_state, after_state, related_entity_type, related_entity_id, metadata, created_at')
+          .select('id, project_stage_id, actor_id, action, reason, before_state, after_state, related_entity_type, related_entity_id, metadata, created_at')
           .eq('project_id', project.id)
           .in('project_stage_id', stageIds)
           .order('created_at', { ascending: false })
@@ -2267,8 +2414,25 @@ export default function Dashboard() {
         acc[item.project_stage_id] = [...(acc[item.project_stage_id] || []), item];
         return acc;
       }, {});
+      const activityActorIds = uniqueIds((activityData || []).map((item: any) => item.actor_id));
+      const { data: activityActorData } = activityActorIds.length
+        ? await supabase
+            .from('profiles')
+            .select('id, email, full_name, role')
+            .in('id', activityActorIds)
+        : { data: [] };
+      const activityActorsById = new Map((activityActorData || []).map((profile: any) => [profile.id, profile]));
       const activitiesByStage = (activityData || []).reduce((acc: any, item: any) => {
-        acc[item.project_stage_id] = [...(acc[item.project_stage_id] || []), item];
+        const stageChecklists = checklistsByStage[item.project_stage_id] || [];
+        const relatedChecklist = String(item.related_entity_type || "").includes("checklist")
+          ? stageChecklists.find((checklist: any) => checklist.id === item.related_entity_id) || null
+          : null;
+        const activityWithActor = {
+          ...item,
+          actor: item.actor_id ? activityActorsById.get(item.actor_id) || null : null,
+          relatedChecklist,
+        };
+        acc[item.project_stage_id] = [...(acc[item.project_stage_id] || []), activityWithActor];
         return acc;
       }, {});
 
@@ -3432,6 +3596,12 @@ export default function Dashboard() {
   const projectRejectedDocuments = projectActiveDocuments.filter((document: any) => document.status === 'REJECTED');
   const projectMissingHardDocuments = projectActiveDocuments.filter((document: any) => document.gate_severity === 'HARD' && canUploadDocument(document));
   const projectDriveLinkedDocuments = projectActiveDocuments.filter((document: any) => document.google_drive_file_id || document.web_view_link);
+  const currentStageActiveDocuments = currentMilestone ? sortProjectDocuments(currentMilestone.documents || []).filter(isActiveDocumentVersion) : [];
+  const currentStageRequiredDocuments = currentStageActiveDocuments.filter((document: any) => document.is_required !== false);
+  const currentStageVerifiedDocuments = currentStageRequiredDocuments.filter((document: any) => document.status === 'VERIFIED');
+  const currentStageRejectedDocuments = currentStageRequiredDocuments.filter((document: any) => document.status === 'REJECTED');
+  const currentStageMissingHardDocuments = currentStageRequiredDocuments.filter((document: any) => document.gate_severity === 'HARD' && canUploadDocument(document));
+  const currentStageDocumentRiskCount = currentStageRejectedDocuments.length + currentStageMissingHardDocuments.length;
   const selectedStageVerifiedDocuments = selectedStageActiveDocuments.filter((document: any) => document.status === 'VERIFIED');
   const selectedStageReviewDocuments = selectedStageActiveDocuments.filter((document: any) => canVerifyDocument(document));
   const selectedStageRejectedDocuments = selectedStageActiveDocuments.filter((document: any) => document.status === 'REJECTED');
@@ -3478,6 +3648,21 @@ export default function Dashboard() {
     });
   const visibleHistoryGroups = stageHistoryScope === 'all' ? allStageHistoryGroups : selectedStageHistoryGroups;
   const visibleStageActivities = visibleHistoryGroups.flatMap((group: any) => group.activities);
+  const projectActivities = milestones
+    .flatMap((stage: any) => (stage.activities || []).map((activity: any) => ({ ...activity, stageTitle: stageDisplay(stage).title, stageCode: stage.code })))
+    .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+  const projectLatestActivities = projectActivities.slice(0, 5);
+  const projectPendingApprovals = milestones.flatMap((stage: any) => stage.approvals || []).filter((approval: any) => approval.status === "PENDING");
+  const projectOpenExceptions = milestones.flatMap((stage: any) => stage.exceptions || []).filter((exception: any) => ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"].includes(exception.status));
+  const projectDocumentRiskCount = projectMissingHardDocuments.length + projectRejectedDocuments.length;
+  const projectDocumentHealthPercent = projectRequiredDocuments.length ? Math.round((projectVerifiedDocuments.length / projectRequiredDocuments.length) * 100) : 100;
+  const projectDriveLinkedPercent = projectActiveDocuments.length ? Math.round((projectDriveLinkedDocuments.length / projectActiveDocuments.length) * 100) : 0;
+  const projectLeadStage = milestones.find((stage: any) => stage.code === "LEAD") || milestones[0] || null;
+  const selectedProjectSystemSize = selectedProject?.system_size_kw || selectedProject?.customer_intake?.interestedSystemSizeKw || selectedProject?.customer_intake?.systemSizeKw || "-";
+  const selectedProjectArea = [selectedProject?.customer_intake?.siteDistrict, selectedProject?.customer_intake?.siteProvince].filter(Boolean).join(", ") || "-";
+  const workflowStageColumnWidth = showProjectStageSequence ? 184 : 132;
+  const workflowStageGapPx = showProjectStageSequence ? 12 : 8;
+  const workflowStageTrackWidth = Math.max(milestones.length, 1) * workflowStageColumnWidth + Math.max(milestones.length - 1, 0) * workflowStageGapPx;
   const selectedStageScheduleSource = selectedStage?.code === 'INSTALLATION'
     ? milestones.find((stage: any) => stage.code === 'SCHEDULING')
     : selectedStage;
@@ -3495,6 +3680,100 @@ export default function Dashboard() {
   const timelineTargetIndex = Math.max(0, milestones.findIndex((stage) => stage.id === timelineTargetStage?.id));
   const timelineProgressPercent = totalMilestones > 1 ? Math.min(100, Math.max(0, (timelineTargetIndex / (totalMilestones - 1)) * 100)) : 0;
   const timelineRailTone = overdueMilestones > 0 ? 'rose' : nearSlaMilestones > 0 ? 'amber' : 'emerald';
+  const statusMiniRailVisual = currentMilestone ? stageVisual(currentMilestone) : { icon: 'check', iconClass: 'border-emerald-100 bg-emerald-50 text-emerald-700' };
+  const statusSummaryTone = timelineRailTone as "emerald" | "amber" | "rose";
+  const actionSummaryTone = currentStageBlockers.length ? "rose" : "emerald";
+  const approvalSummaryTone = projectPendingApprovals.length ? "amber" : "slate";
+  const documentSummaryTone = currentStageDocumentRiskCount ? "rose" : projectReviewDocuments.length || projectDocumentHealthPercent > 0 ? "blue" : "slate";
+  const updateStageRailOverflow = () => {
+    const rail = stageRailRef.current;
+    if (!rail) return;
+    const maxScrollLeft = rail.scrollWidth - rail.clientWidth;
+    setStageRailOverflow({
+      left: rail.scrollLeft > 4,
+      right: rail.scrollLeft < maxScrollLeft - 4,
+    });
+  };
+  const scrollStageRail = (direction: 'left' | 'right') => {
+    const rail = stageRailRef.current;
+    if (!rail) return;
+    rail.scrollBy({
+      left: (direction === 'left' ? -1 : 1) * Math.max(280, Math.round(rail.clientWidth * 0.65)),
+      behavior: 'smooth',
+    });
+  };
+  const handleStageRailPointerDown = (event: any) => {
+    const rail = stageRailRef.current;
+    if (!rail) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    stageRailDragRef.current = {
+      active: true,
+      startX: event.clientX,
+      scrollLeft: rail.scrollLeft,
+      moved: false,
+      pointerId: event.pointerId,
+    };
+  };
+  const handleStageRailPointerMove = (event: any) => {
+    const rail = stageRailRef.current;
+    const drag = stageRailDragRef.current;
+    if (!rail || !drag.active) return;
+    const deltaX = event.clientX - drag.startX;
+    if (Math.abs(deltaX) > 4 && !drag.moved) {
+      drag.moved = true;
+      rail.setPointerCapture?.(event.pointerId);
+      setStageRailDragging(true);
+    }
+    if (drag.moved) {
+      event.preventDefault();
+      rail.scrollLeft = drag.scrollLeft - deltaX;
+      updateStageRailOverflow();
+    }
+  };
+  const endStageRailDrag = (event?: any) => {
+    const rail = stageRailRef.current;
+    const drag = stageRailDragRef.current;
+    if (!drag.active) return;
+    if (rail && drag.pointerId !== null && rail.hasPointerCapture?.(drag.pointerId)) {
+      rail.releasePointerCapture?.(drag.pointerId);
+    }
+    suppressStageRailClickRef.current = drag.moved;
+    stageRailDragRef.current = { active: false, startX: 0, scrollLeft: 0, moved: false, pointerId: null };
+    setStageRailDragging(false);
+    if (event && drag.moved) event.preventDefault();
+    window.setTimeout(() => {
+      suppressStageRailClickRef.current = false;
+    }, 0);
+  };
+  const handleStageRailClickCapture = (event: any) => {
+    if (!suppressStageRailClickRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  useEffect(() => {
+    const rail = stageRailRef.current;
+    if (!rail) return;
+    const currentStageElement = timelineTargetStage?.id
+      ? rail.querySelector(`[data-stage-id="${CSS.escape(String(timelineTargetStage.id))}"]`)
+      : null;
+    currentStageElement?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    requestAnimationFrame(updateStageRailOverflow);
+  }, [selectedProject?.id, timelineTargetStage?.id, milestones.length, workflowStageTrackWidth]);
+
+  useEffect(() => {
+    const rail = stageRailRef.current;
+    if (!rail) return;
+    updateStageRailOverflow();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateStageRailOverflow) : null;
+    observer?.observe(rail);
+    const onResize = () => updateStageRailOverflow();
+    window.addEventListener('resize', onResize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, [workflowStageTrackWidth, showProjectStageSequence]);
   const nextActionAssistant = buildNextActionAssistant({
     selectedProject,
     milestones,
@@ -3525,48 +3804,50 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[#FBFBFC] relative">
-        <AppHeader
-          activeTab={activeTab}
-          selectedProject={selectedProject}
-          milestones={milestones}
-          totalMilestones={totalMilestones}
-          completedMilestones={completedMilestones}
-          progressPercent={progressPercent}
-          overdueMilestones={overdueMilestones}
-          nearSlaMilestones={nearSlaMilestones}
-          timelineTargetStage={timelineTargetStage}
-          timelineTargetIndex={timelineTargetIndex}
-          timelineProgressPercent={timelineProgressPercent}
-          timelineRailTone={timelineRailTone}
-          timelineElapsed={timelineElapsed}
-          refreshingSla={refreshingSla}
-          stageTitle={(stage) => stageDisplay(stage).title}
-          formatSlaDuration={formatSlaDuration}
-          onGoProjects={() => {
-            setActiveTab("projects");
-            setSelectedProject(null);
-          }}
-          onRefreshSla={handleRefreshSla}
-          onRefreshAll={() => {
-            fetchProjects();
-            fetchFieldJobs();
-            fetchSchedulingItems();
-            fetchResourceTeams();
-            fetchBillingItems();
-            fetchQaItems();
-            fetchApprovalItems();
-            fetchWorkflowGovernance();
-            fetchNotifications();
-          }}
-          onNewProject={() => setIsModalOpen(true)}
-          onBackToProjects={() => setSelectedProject(null)}
-          userEmail={authEmail}
-          userRoleLabel={currentUserRole ? roleLabelWithCode(currentUserRole) : null}
-          onOpenAuth={() => setAuthDialogOpen(true)}
-          onSignOut={handleSignOut}
-        />
+        {!(activeTab === "projects" && selectedProject) && (
+          <AppHeader
+            activeTab={activeTab}
+            selectedProject={selectedProject}
+            milestones={milestones}
+            totalMilestones={totalMilestones}
+            completedMilestones={completedMilestones}
+            progressPercent={progressPercent}
+            overdueMilestones={overdueMilestones}
+            nearSlaMilestones={nearSlaMilestones}
+            timelineTargetStage={timelineTargetStage}
+            timelineTargetIndex={timelineTargetIndex}
+            timelineProgressPercent={timelineProgressPercent}
+            timelineRailTone={timelineRailTone}
+            timelineElapsed={timelineElapsed}
+            refreshingSla={refreshingSla}
+            stageTitle={(stage) => stageDisplay(stage).title}
+            formatSlaDuration={formatSlaDuration}
+            onGoProjects={() => {
+              setActiveTab("projects");
+              setSelectedProject(null);
+            }}
+            onRefreshSla={handleRefreshSla}
+            onRefreshAll={() => {
+              fetchProjects();
+              fetchFieldJobs();
+              fetchSchedulingItems();
+              fetchResourceTeams();
+              fetchBillingItems();
+              fetchQaItems();
+              fetchApprovalItems();
+              fetchWorkflowGovernance();
+              fetchNotifications();
+            }}
+            onNewProject={() => setIsModalOpen(true)}
+            onBackToProjects={() => setSelectedProject(null)}
+            userEmail={authEmail}
+            userRoleLabel={currentUserRole ? roleLabelWithCode(currentUserRole) : null}
+            onOpenAuth={() => setAuthDialogOpen(true)}
+            onSignOut={handleSignOut}
+          />
+        )}
 
-        <div className={`flex-1 overflow-y-auto scrollbar-thin ${activeTab === 'dashboard' ? 'bg-slate-100/80' : 'bg-white'} ${activeTab === 'scheduling' ? 'p-4 md:p-5' : selectedProject ? 'p-6 md:p-8' : 'p-6 md:p-8'}`}>
+        <div className={`flex-1 overflow-y-auto scrollbar-thin ${activeTab === 'dashboard' ? 'bg-slate-100/80' : selectedProject ? 'bg-[#f8fafc]' : 'bg-white'} ${activeTab === 'scheduling' ? 'p-4 md:p-5' : selectedProject ? 'p-4 md:p-5' : 'p-6 md:p-8'}`}>
           
           {!authEmail ? (
             <div className="flex min-h-full items-center justify-center">
@@ -6089,8 +6370,696 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="w-full space-y-5">
+              <section className="space-y-5">
+                <div>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProject(null)}
+                        className="mb-3 inline-flex items-center gap-2 text-[12px] font-bold text-slate-500 transition-colors hover:text-slate-950"
+                      >
+                        <span className="text-[16px] leading-none">&larr;</span>
+                        Back to project list
+                      </button>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h1 className="text-[28px] font-black leading-tight tracking-tight text-slate-950">{selectedProject.customer_code}</h1>
+                        <span className={`rounded-full border px-3 py-1 text-[11px] font-black ${selectedProject.status === 'COMPLETED' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                          {selectedProject.status === 'COMPLETED' ? 'Completed' : 'Active'}
+                        </span>
+                        <span className={`rounded-full border px-3 py-1 text-[11px] font-black ${timelineRailTone === 'rose' ? 'border-rose-200 bg-rose-50 text-rose-700' : timelineRailTone === 'amber' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                          {statusLabel(currentMilestone?.sla_status || selectedProject.sla_status || 'ON_TRACK')}
+                        </span>
+                        {currentMilestone && (
+                          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1 text-[11px] font-bold text-slate-600 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                            อยู่ในขั้นตอน : {stageDisplay(currentMilestone).title}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] font-semibold text-slate-500">
+                        <span className="font-bold text-slate-800">{selectedProject.customer_name || 'ไม่ระบุชื่อลูกค้า'}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{selectedProject.project_type || 'RES-S'}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{selectedProjectSystemSize}{String(selectedProjectSystemSize).includes('kW') || selectedProjectSystemSize === '-' ? '' : ' kWp'}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{selectedProject.payment_type || 'CASH'}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{selectedProjectArea}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const text = [
+                            selectedProject.customer_code,
+                            selectedProject.customer_name,
+                            selectedProject.customer_phone,
+                            selectedProject.payment_type,
+                          ].filter(Boolean).join(' | ');
+                          await navigator.clipboard?.writeText(text);
+                          showNotice('success', 'คัดลอกข้อมูลซัพพอร์ตแล้ว', text);
+                        }}
+                        title="คัดลอกข้อมูลซัพพอร์ต"
+                        aria-label="คัดลอกข้อมูลซัพพอร์ต"
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200/90 bg-white px-3 text-[12px] font-bold text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-colors hover:bg-slate-50"
+                      >
+                        <StageIcon name="file" />
+                        คัดลอกข้อมูลซัพพอร์ต
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        title="พิมพ์"
+                        aria-label="พิมพ์"
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200/90 bg-white px-3 text-[12px] font-bold text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-colors hover:bg-slate-50"
+                      >
+                        <StageIcon name="receipt" />
+                        พิมพ์
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => projectLeadStage ? setSelectedStageId(projectLeadStage.id) : showNotice('info', 'No lead stage found')}
+                        title="แก้ไขโครงการ"
+                        aria-label="แก้ไขโครงการ"
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-[12px] font-bold text-white shadow-[0_8px_16px_rgba(37,99,235,0.18)] transition-colors hover:bg-blue-700"
+                      >
+                        <StageIcon name="tool" />
+                        แก้ไขโครงการ
+                      </button>
+                    </div>
+                  </div>
+
+                  {totalMilestones > 0 && (
+                    <div className="relative mt-3 overflow-hidden rounded-xl bg-white">
+                      <div className="flex items-center justify-between gap-3 px-3 pt-2">
+                        <span aria-hidden="true"></span>
+                        <button
+                          type="button"
+                          title={showProjectStageSequence ? 'ซ่อนรายละเอียดลำดับขั้นตอน' : 'แสดงรายละเอียดลำดับขั้นตอน'}
+                          aria-label={showProjectStageSequence ? 'ซ่อนรายละเอียดลำดับขั้นตอน' : 'แสดงรายละเอียดลำดับขั้นตอน'}
+                          onClick={() => setShowProjectStageSequence((current) => !current)}
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                        >
+                          <span className="[&_svg]:h-5 [&_svg]:w-5"><StageIcon name="expand" /></span>
+                        </button>
+                      </div>
+                      <div className="relative">
+                        {!showProjectStageSequence && stageRailOverflow.left && (
+                          <>
+                            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-white via-white/85 to-transparent"></div>
+                            <button
+                              type="button"
+                              aria-label="เลื่อนลำดับขั้นตอนไปทางซ้าย"
+                              title="เลื่อนลำดับขั้นตอนไปทางซ้าย"
+                              onClick={() => scrollStageRail('left')}
+                              className="absolute left-4 top-[38%] z-20 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-sky-100 bg-white/95 text-sky-600 shadow-[0_8px_18px_rgba(37,99,235,0.12)] transition-all hover:-translate-y-[52%] hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200"
+                            >
+                              <span className="[&_svg]:h-5 [&_svg]:w-5"><StageIcon name="chevronLeft" /></span>
+                            </button>
+                          </>
+                        )}
+                        {!showProjectStageSequence && stageRailOverflow.right && (
+                          <>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white via-white/85 to-transparent"></div>
+                            <button
+                              type="button"
+                              aria-label="เลื่อนลำดับขั้นตอนไปทางขวา"
+                              title="เลื่อนลำดับขั้นตอนไปทางขวา"
+                              onClick={() => scrollStageRail('right')}
+                              className="absolute right-4 top-[38%] z-20 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-sky-100 bg-white/95 text-sky-600 shadow-[0_8px_18px_rgba(37,99,235,0.12)] transition-all hover:-translate-y-[52%] hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200"
+                            >
+                              <span className="[&_svg]:h-5 [&_svg]:w-5"><StageIcon name="chevronRight" /></span>
+                            </button>
+                          </>
+                        )}
+                      <div
+                        ref={stageRailRef}
+                        onScroll={updateStageRailOverflow}
+                        onPointerDown={handleStageRailPointerDown}
+                        onPointerMove={handleStageRailPointerMove}
+                        onPointerUp={endStageRailDrag}
+                        onPointerCancel={endStageRailDrag}
+                        onPointerLeave={endStageRailDrag}
+                        onClickCapture={handleStageRailClickCapture}
+                        className={`${showProjectStageSequence ? 'overflow-x-auto px-3 pb-3' : 'scrollbar-none overflow-x-auto pb-2 pl-0 pr-14'} select-none pt-2 ${stageRailDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                      >
+                        <div
+                          className="min-w-max"
+                          style={{ width: `max(100%, ${workflowStageTrackWidth}px)` }}
+                        >
+                        <div
+                          className="grid pt-3 transition-[gap] duration-200"
+                          style={{
+                            gap: `${workflowStageGapPx}px`,
+                            gridTemplateColumns: `repeat(${Math.max(milestones.length, 1)}, minmax(${workflowStageColumnWidth}px, ${workflowStageColumnWidth}px))`,
+                          }}
+                        >
+                          {milestones.map((stage: any, index: number) => {
+                            const isDone = stage.dynamicStatus === 'Completed';
+                            const isCurrent = stage.id === timelineTargetStage?.id;
+                            const visual = stageVisual(stage);
+                            const isOverdue = stage.dynamicStatus === 'Overdue';
+                            const isNearSla = stage.dynamicStatus === 'Near SLA';
+                            const isBlocked = stage.dynamicStatus === 'Blocked';
+                            const activeMarkerClass = isOverdue || isBlocked
+                              ? 'active-stage-marker is-overdue'
+                              : isNearSla
+                                ? 'active-stage-marker is-near-sla'
+                                : 'active-stage-marker is-on-track';
+                            const showRunningTime = isCurrent && !stage.actual_completed_at && runningStageHours(stage);
+                            const stageTone = isCurrent
+                              ? `border-emerald-700 bg-emerald-600 text-white ring-4 ring-emerald-100 ${activeMarkerClass}`
+                              : isDone
+                                ? `${visual.iconClass.replace('bg-', 'bg-').replace('text-', 'text-')} shadow-sm`
+                                : 'border-slate-200 bg-slate-200 text-slate-500';
+                            return (
+                              <div key={stage.id} data-stage-id={stage.id} className="relative flex min-w-0 justify-center">
+                                <div className={`absolute left-0 top-6 h-[3px] w-[calc(50%-32px)] rounded-full ${index === 0 ? 'bg-transparent' : isDone || isCurrent ? 'bg-sky-500' : 'bg-slate-200'}`}></div>
+                                <div className={`absolute right-0 top-6 h-[3px] w-[calc(50%-32px)] rounded-full ${isDone ? 'bg-sky-500' : 'bg-slate-200'}`}></div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedStageId(stage.id)}
+                                  title={stageDisplay(stage).title}
+                                  className="group relative z-10 flex w-full flex-col items-center text-center"
+                                >
+                                  <span className={`relative flex h-12 w-12 items-center justify-center rounded-full border text-[13px] transition-transform group-hover:scale-105 ${stageTone}`}>
+                                    <span className="[&_svg]:h-5 [&_svg]:w-5">
+                                      <StageIcon name={visual.icon} />
+                                    </span>
+                                    {isDone && (
+                                      <span className="absolute -right-0.5 top-7 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-emerald-500 text-white [&_svg]:h-2.5 [&_svg]:w-2.5">
+                                        <StageIcon name="check" />
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="mt-2 line-clamp-2 min-h-[28px] px-1 text-[10px] font-black leading-3 text-slate-900">{index + 1}. {stageDisplay(stage).title}</span>
+                                  <span className={`mt-1 inline-flex min-h-[16px] items-center justify-center gap-1 text-[10px] font-semibold ${isCurrent ? 'text-blue-600' : isDone ? 'text-slate-500' : 'text-slate-400'}`}>
+                                    <span>{isCurrent ? 'กำลังดำเนินการ' : isDone ? 'เสร็จสิ้น' : 'รอเริ่ม'}</span>
+                                    {showRunningTime && (
+                                      <span className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${runningStageBadgeClass(stage)}`}>
+                                        <span className="shrink-0 text-amber-600 [&_svg]:h-2.5 [&_svg]:w-2.5"><StageIcon name="wait" /></span>
+                                        <span>{runningStageLabel(stage)}</span>
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="mt-1 min-h-[14px] text-[10px] font-semibold text-slate-400">
+                                    {stage.actual_completed_at ? timelineDateLabel(stage.actual_completed_at) : stage.started_at ? timelineDateLabel(stage.started_at) : ''}
+                                  </span>
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {showProjectStageSequence && (
+                          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 py-3 text-[11px] font-semibold text-slate-500">
+                            <span className="inline-flex items-center gap-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-emerald-500 text-white [&_svg]:h-2.5 [&_svg]:w-2.5"><StageIcon name="check" /></span>เสร็จสิ้น</span>
+                            <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded-full border-2 border-emerald-500 bg-white"></span>กำลังดำเนินการ</span>
+                            <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded-full bg-slate-200"></span>รอเริ่ม</span>
+                            <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded-full bg-rose-500"></span>มีปัญหา/ติดขัด</span>
+                            <span className="inline-flex items-center gap-1.5"><span className="text-amber-500 [&_svg]:h-3.5 [&_svg]:w-3.5"><StageIcon name="wait" /></span>รอการอนุมัติ</span>
+                          </div>
+                        )}
+                        {showProjectStageSequence && (
+                          <div className="mt-4 border-t border-slate-100 bg-[#f8fafc] pt-4">
+                            <div
+                              className="grid pb-1"
+                              style={{
+                                gap: `${workflowStageGapPx}px`,
+                                gridTemplateColumns: `repeat(${Math.max(milestones.length, 1)}, minmax(${workflowStageColumnWidth}px, ${workflowStageColumnWidth}px))`,
+                              }}
+                            >
+                              {milestones.map((stage: any, index: number) => {
+                                const display = stageDisplay(stage);
+                                const visual = stageVisual(stage);
+                                const isCompleted = stage.dynamicStatus === 'Completed';
+                                const isCurrent = stage.id === timelineTargetStage?.id;
+                                const isOverdue = stage.dynamicStatus === 'Overdue';
+                                const isNearSla = stage.dynamicStatus === 'Near SLA';
+                                const isBlocked = stage.dynamicStatus === 'Blocked';
+                                const activeDocuments = sortProjectDocuments(stage.documents || []).filter(isActiveDocumentVersion);
+                                const gateItems = [...(stage.checklists || []), ...activeDocuments];
+                                const passedGates = gateItems.filter(gateItemPassed).length;
+                                const activeTone = isOverdue || isBlocked ? 'rose' : isNearSla ? 'amber' : 'emerald';
+                                const cardClass = isCurrent
+                                  ? activeTone === 'rose'
+                                    ? 'border-rose-200 bg-rose-50/50 shadow-md shadow-rose-100/70'
+                                    : activeTone === 'amber'
+                                      ? 'border-amber-200 bg-amber-50/50 shadow-md shadow-amber-100/70'
+                                      : 'border-emerald-200 bg-emerald-50/60 shadow-md shadow-emerald-100/70'
+                                  : isCompleted
+                                    ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white shadow-sm shadow-emerald-100/70'
+                                    : 'border-slate-200 bg-slate-50/70 opacity-80';
+                                const deadlineTextClass = isOverdue || isBlocked
+                                  ? 'font-semibold text-rose-600'
+                                  : isNearSla
+                                    ? 'font-semibold text-amber-600'
+                                  : 'font-semibold text-slate-800';
+
+                                return (
+                                  <div key={stage.id} className="relative min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedStageId(stage.id)}
+                                      className={`relative flex min-h-[190px] w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-lg border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${cardClass}`}
+                                    >
+                                      <span className={`absolute inset-x-0 top-0 h-1 ${isCurrent ? activeTone === 'rose' ? 'bg-rose-500' : activeTone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500' : isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`}></span>
+                                      <div className="flex min-h-11 items-start gap-2">
+                                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${isCompleted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : visual.iconClass}`}>
+                                          <StageIcon name={visual.icon} />
+                                        </span>
+                                        <div className="min-w-0">
+                                          <h4 className="line-clamp-2 text-[12px] font-bold leading-4 text-slate-950">{display.title}</h4>
+                                          <div className="mt-1 flex flex-wrap gap-1">
+                                            {isBlocked && <span className="rounded border border-rose-100 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-600">BLOCKED</span>}
+                                            {isOverdue && <span className="rounded border border-rose-100 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-600">OVERDUE</span>}
+                                            {isNearSla && <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">NEAR SLA</span>}
+                                            {isCurrent && !isOverdue && !isNearSla && !isBlocked && <span className="rounded border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">ACTIVE</span>}
+                                            {isCompleted && <span className="rounded border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">DONE</span>}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="mt-3 grid gap-1.5 text-[11px] text-slate-500">
+                                        <div className="flex items-center justify-between gap-2"><span className="shrink-0">SLA</span><b className="whitespace-nowrap font-semibold text-slate-800">{formatSlaDuration(stage.workflow_definitions?.sla_hours || stage.workflow_stages?.sla_hours || stage.sla_hours)}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span className="shrink-0">เริ่มเมื่อ</span><b className="whitespace-nowrap text-[10px] font-semibold text-slate-800">{formatDateTime(stage.started_at)}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span>{isCompleted ? 'เสร็จเมื่อ' : 'Deadline'}</span><b className={`truncate ${deadlineTextClass}`}>{stage.actual_completed_at ? formatDateTime(stage.actual_completed_at) : stage.deadline ? formatDateTime(stage.deadline) : 'N/A'}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span>ผู้รับผิดชอบ</span><b className="truncate font-semibold text-slate-800">{stageOwner(stage)}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span>Gates</span><b className={`truncate font-semibold ${gateItems.length && passedGates < gateItems.length ? 'text-amber-700' : 'text-slate-800'}`}>{gateItems.length ? `${passedGates}/${gateItems.length}` : 'ไม่มี'}</b></div>
+                                      </div>
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        </div>
+                      </div>
+                      </div>
+
+                        <div className={`${showProjectStageSequence ? 'hidden' : 'mx-3 flex'} flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 py-3 text-[11px] font-semibold text-slate-500`}>
+                          <span className="inline-flex items-center gap-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-emerald-500 text-white [&_svg]:h-2.5 [&_svg]:w-2.5"><StageIcon name="check" /></span>เสร็จสิ้น</span>
+                          <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded-full border-2 border-emerald-500 bg-white"></span>กำลังดำเนินการ</span>
+                          <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded-full bg-slate-200"></span>รอเริ่ม</span>
+                          <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded-full bg-rose-500"></span>มีปัญหา/ติดขัด</span>
+                          <span className="inline-flex items-center gap-1.5"><span className="text-amber-500 [&_svg]:h-3.5 [&_svg]:w-3.5"><StageIcon name="wait" /></span>รอการอนุมัติ</span>
+                        </div>
+
+                          {false && showProjectStageSequence && (
+                            <div className="overflow-x-auto px-3 pb-4">
+                            <div
+                              className="min-w-max border-t border-slate-100 bg-[#f8fafc] pt-4"
+                              style={{ width: `max(100%, ${workflowStageTrackWidth}px)` }}
+                            >
+                            <div
+                              className="grid pb-1"
+                              style={{
+                                gap: `${workflowStageGapPx}px`,
+                                gridTemplateColumns: `repeat(${Math.max(milestones.length, 1)}, minmax(${workflowStageColumnWidth}px, ${workflowStageColumnWidth}px))`,
+                              }}
+                            >
+                              {milestones.map((stage: any, index: number) => {
+                                const display = stageDisplay(stage);
+                                const visual = stageVisual(stage);
+                                const isCompleted = stage.dynamicStatus === 'Completed';
+                                const isCurrent = stage.id === timelineTargetStage?.id;
+                                const isOverdue = stage.dynamicStatus === 'Overdue';
+                                const isNearSla = stage.dynamicStatus === 'Near SLA';
+                                const isBlocked = stage.dynamicStatus === 'Blocked';
+                                const activeDocuments = sortProjectDocuments(stage.documents || []).filter(isActiveDocumentVersion);
+                                const gateItems = [...(stage.checklists || []), ...activeDocuments];
+                                const passedGates = gateItems.filter(gateItemPassed).length;
+                                const activeTone = isOverdue || isBlocked ? 'rose' : isNearSla ? 'amber' : 'emerald';
+                                const cardClass = isCurrent
+                                  ? activeTone === 'rose'
+                                    ? 'border-rose-200 bg-rose-50/50 shadow-md shadow-rose-100/70'
+                                    : activeTone === 'amber'
+                                      ? 'border-amber-200 bg-amber-50/50 shadow-md shadow-amber-100/70'
+                                      : 'border-emerald-200 bg-emerald-50/60 shadow-md shadow-emerald-100/70'
+                                  : isCompleted
+                                    ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white shadow-sm shadow-emerald-100/70'
+                                    : 'border-slate-200 bg-slate-50/70 opacity-80';
+                                const deadlineTextClass = isOverdue || isBlocked
+                                  ? 'font-semibold text-rose-600'
+                                  : isNearSla
+                                    ? 'font-semibold text-amber-600'
+                                  : 'font-semibold text-slate-800';
+
+                                return (
+                                  <div key={stage.id} className="relative min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedStageId(stage.id)}
+                                      className={`relative flex min-h-[190px] w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-lg border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${cardClass}`}
+                                    >
+                                      <span className={`absolute inset-x-0 top-0 h-1 ${isCurrent ? activeTone === 'rose' ? 'bg-rose-500' : activeTone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500' : isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`}></span>
+                                      <div className="flex min-h-11 items-start gap-2">
+                                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${isCompleted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : visual.iconClass}`}>
+                                          <StageIcon name={visual.icon} />
+                                        </span>
+                                        <div className="min-w-0">
+                                          <h4 className="line-clamp-2 text-[12px] font-bold leading-4 text-slate-950">{display.title}</h4>
+                                          <div className="mt-1 flex flex-wrap gap-1">
+                                            {isBlocked && <span className="rounded border border-rose-100 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-600">BLOCKED</span>}
+                                            {isOverdue && <span className="rounded border border-rose-100 bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-600">OVERDUE</span>}
+                                            {isNearSla && <span className="rounded border border-amber-100 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">NEAR SLA</span>}
+                                            {isCurrent && !isOverdue && !isNearSla && !isBlocked && <span className="rounded border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">ACTIVE</span>}
+                                            {isCompleted && <span className="rounded border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">DONE</span>}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="mt-3 grid gap-1.5 text-[11px] text-slate-500">
+                                        <div className="flex items-center justify-between gap-2"><span className="shrink-0">SLA</span><b className="whitespace-nowrap font-semibold text-slate-800">{formatSlaDuration(stage.workflow_definitions?.sla_hours || stage.workflow_stages?.sla_hours || stage.sla_hours)}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span className="shrink-0">เริ่มเมื่อ</span><b className="whitespace-nowrap text-[10px] font-semibold text-slate-800">{formatDateTime(stage.started_at)}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span>{isCompleted ? 'เสร็จเมื่อ' : 'Deadline'}</span><b className={`truncate ${deadlineTextClass}`}>{stage.actual_completed_at ? formatDateTime(stage.actual_completed_at) : stage.deadline ? formatDateTime(stage.deadline) : 'N/A'}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span>ผู้รับผิดชอบ</span><b className="truncate font-semibold text-slate-800">{stageOwner(stage)}</b></div>
+                                        <div className="flex items-center justify-between gap-2"><span>Gates</span><b className={`truncate font-semibold ${gateItems.length && passedGates < gateItems.length ? 'text-amber-700' : 'text-slate-800'}`}>{gateItems.length ? `${passedGates}/${gateItems.length}` : 'ไม่มี'}</b></div>
+                                      </div>
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            </div>
+                            </div>
+                          )}
+                    </div>
+                  )}
+
+                  <div className="mt-5 grid gap-3 lg:grid-cols-4">
+                    <div className={`relative self-start overflow-hidden rounded-xl border px-4 py-4 shadow-[0_8px_22px_rgba(15,23,42,0.045)] ${summaryCardClass(statusSummaryTone)}`}>
+                      <span className={`pointer-events-none absolute -right-5 -top-4 opacity-[0.08] [&_svg]:h-28 [&_svg]:w-28 ${summaryWatermarkClass(statusSummaryTone)}`}><StageIcon name="check" /></span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[12px] font-black text-slate-950">สถานะโครงการ</p>
+                          <p className="mt-2 text-[13px] font-bold text-slate-800">{currentMilestone ? stageDisplay(currentMilestone).title : 'ไม่พบขั้นตอน'}</p>
+                          <p className="mt-1 text-[11px] font-semibold text-slate-500">Owner: {currentMilestone ? stageOwner(currentMilestone) : '-'}</p>
+                        </div>
+                        <span className={`h-2.5 w-2.5 rounded-full ${timelineRailTone === 'rose' ? 'bg-rose-500' : timelineRailTone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                      </div>
+                      <div
+                        className="mt-4 rounded-lg border border-slate-100 bg-white px-3 py-3 shadow-[0_1px_6px_rgba(15,23,42,0.035)]"
+                        title={currentMilestone ? stageDisplay(currentMilestone).title : undefined}
+                        aria-label={`ขั้นตอนปัจจุบัน ${timelineTargetIndex + 1} จาก ${totalMilestones}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border [&_svg]:h-4 [&_svg]:w-4 ${statusMiniRailVisual.iconClass}`}>
+                              <StageIcon name={statusMiniRailVisual.icon} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-[12px] font-black text-slate-900">{currentMilestone ? stageDisplay(currentMilestone).title : '-'}</p>
+                              <p className="text-[10px] font-semibold text-slate-500">ขั้นที่ {timelineTargetIndex + 1} จาก {totalMilestones}</p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700">
+                            {completedMilestones}/{totalMilestones}
+                          </span>
+                        </div>
+                        <div className="relative mt-3 h-2 rounded-full bg-slate-200">
+                          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progressPercent}%` }}></div>
+                          <span
+                            className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-emerald-600 shadow-[0_2px_8px_rgba(5,150,105,0.28)]"
+                            style={{ left: `${progressPercent}%` }}
+                          ></span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-bold text-slate-500">
+                          <p>เสร็จสิ้นแล้ว {completedMilestones} ขั้นตอน</p>
+                          <p className="text-[10px] font-black text-slate-400">{progressPercent}%</p>
+                        </div>
+                      </div>
+                      <div className="hidden" aria-label={`ขั้นตอนปัจจุบัน ${timelineTargetIndex + 1} จาก ${totalMilestones}`}>
+                        {milestones.map((stage: any, index: number) => {
+                          const isDone = stage.actual_completed_at || stage.dynamicStatus === 'Completed';
+                          const isCurrent = stage.id === timelineTargetStage?.id;
+                          return (
+                            <div key={stage.id || index} className="flex flex-1 items-center last:flex-none">
+                              <span
+                                title={stageDisplay(stage).title}
+                                className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
+                                  isCurrent
+                                    ? 'border-emerald-500 bg-white ring-4 ring-emerald-100'
+                                    : isDone
+                                      ? 'border-emerald-500 bg-emerald-500'
+                                      : 'border-slate-200 bg-slate-100'
+                                }`}
+                              >
+                                {isCurrent && <span className="h-2 w-2 rounded-full bg-emerald-500"></span>}
+                              </span>
+                              {index < milestones.length - 1 && (
+                                <span className={`h-0.5 flex-1 ${isDone ? 'bg-emerald-300' : 'bg-slate-200'}`}></span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="hidden">
+                        <p>กำลังดำเนินการขั้นที่ {timelineTargetIndex + 1} จาก {totalMilestones}</p>
+                        <p>เสร็จสิ้นแล้ว {completedMilestones} ขั้นตอน</p>
+                      </div>
+                    </div>
+
+                    <div className={`relative overflow-hidden rounded-xl border px-4 py-4 shadow-[0_8px_22px_rgba(15,23,42,0.045)] ${summaryCardClass(actionSummaryTone)}`}>
+                      <span className={`pointer-events-none absolute -right-5 -top-4 opacity-[0.08] [&_svg]:h-28 [&_svg]:w-28 ${summaryWatermarkClass(actionSummaryTone)}`}><StageIcon name="arrowRight" /></span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[12px] font-black text-slate-950">{currentStageBlockers.length ? 'สิ่งที่ต้องดำเนินการ' : 'พร้อมไปขั้นถัดไป'}</p>
+                          {currentStageBlockers.length ? (
+                            <p className="mt-2 text-[22px] font-black text-rose-600">{currentStageBlockers.length}</p>
+                          ) : (
+                            <p className="mt-2 text-[14px] font-black text-emerald-700">ไม่มี blocker</p>
+                          )}
+                          <p className="text-[11px] font-semibold text-slate-600">{currentStageBlockers.length ? (nextActionAssistant?.status || 'blocking gates') : 'ยืนยันงานปัจจุบันเพื่อไปขั้นถัดไป'}</p>
+                        </div>
+                      </div>
+                      {nextActionAssistant && (
+                        <div className="mt-3 rounded-md border border-slate-100 bg-white px-3 py-2 shadow-[0_1px_4px_rgba(15,23,42,0.035)]">
+                          <p className="line-clamp-1 text-[12px] font-black text-slate-950">{nextActionAssistant.title}</p>
+                          <p className="mt-1 line-clamp-2 text-[12px] font-semibold leading-5 text-slate-700">{nextActionAssistant.suggestion}</p>
+                        </div>
+                      )}
+                      {currentMilestone && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {canCompleteCurrentStage ? (
+                            <button
+                              type="button"
+                              onClick={() => currentStageReady ? handleCompleteMilestone(currentMilestone.id) : setSelectedStageId(currentMilestone.id)}
+                              disabled={completingStageId === currentMilestone.id}
+                              className={`min-h-9 rounded-md px-3 py-2 text-[11px] font-bold shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-slate-300 ${
+                                currentStageReady
+                                  ? 'bg-slate-950 text-white shadow-[0_8px_16px_rgba(15,23,42,0.18)] hover:bg-slate-800'
+                                  : 'border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                              }`}
+                            >
+                              {completingStageId === currentMilestone.id ? 'กำลังบันทึก...' : currentStageReady ? completionButtonLabel(currentMilestone) : 'ดูรายการที่ติดอยู่'}
+                            </button>
+                          ) : (
+                            <span className="rounded-md border border-slate-200 bg-white/70 px-3 py-2 text-[11px] font-bold text-slate-600">
+                              รอ {stageOwner(currentMilestone)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {currentStageBlockers[0] && (
+                        <button type="button" onClick={() => currentMilestone && setSelectedStageId(currentMilestone.id)} className="mt-3 text-left text-[11px] font-bold text-rose-700 underline decoration-rose-200">
+                          {gateBlockerSummary(currentStageBlockers[0])}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className={`relative overflow-hidden rounded-xl border px-4 py-4 shadow-[0_8px_22px_rgba(15,23,42,0.045)] ${summaryCardClass(approvalSummaryTone)}`}>
+                      <span className={`pointer-events-none absolute -right-5 -top-4 opacity-[0.08] [&_svg]:h-28 [&_svg]:w-28 ${summaryWatermarkClass(approvalSummaryTone)}`}><StageIcon name="wait" /></span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[12px] font-black text-slate-950">การอนุมัติที่รออยู่</p>
+                          <p className={`mt-2 text-[22px] font-black ${projectPendingApprovals.length ? 'text-amber-600' : 'text-slate-400'}`}>{projectPendingApprovals.length}</p>
+                          <p className="text-[11px] font-semibold text-slate-600">
+                            {projectPendingApprovals.length ? `\u0e23\u0e2d\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34 ${projectPendingApprovals.length} \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23` : "\u0e44\u0e21\u0e48\u0e21\u0e35\u0e04\u0e33\u0e02\u0e2d\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34"}
+                          </p>
+                          <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                            {projectOpenExceptions.length ? `exception \u0e04\u0e49\u0e32\u0e07 ${projectOpenExceptions.length}` : "\u0e44\u0e21\u0e48\u0e21\u0e35 exception \u0e04\u0e49\u0e32\u0e07"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`relative overflow-hidden rounded-xl border px-4 py-4 shadow-[0_8px_22px_rgba(15,23,42,0.045)] ${summaryCardClass(documentSummaryTone)}`}>
+                      <span className={`pointer-events-none absolute -right-5 -top-4 opacity-[0.08] [&_svg]:h-28 [&_svg]:w-28 ${summaryWatermarkClass(documentSummaryTone)}`}><StageIcon name="file" /></span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[12px] font-black text-slate-950">เอกสาร</p>
+                          <div className="mt-3 grid grid-cols-2 gap-3">
+                            <div>
+                              <p className={`text-[22px] font-black ${currentStageDocumentRiskCount ? 'text-rose-600' : currentStageRequiredDocuments.length ? 'text-blue-600' : 'text-slate-500'}`}>{currentStageVerifiedDocuments.length}/{currentStageRequiredDocuments.length}</p>
+                              <p className="text-[11px] font-semibold text-slate-600">เอกสารที่ต้องใช้ตอนนี้</p>
+                            </div>
+                            <div className="border-l border-slate-200 pl-3">
+                              <p className={`text-[22px] font-black ${projectDocumentHealthPercent >= 100 ? 'text-emerald-700' : projectDocumentHealthPercent > 0 ? 'text-blue-600' : 'text-slate-500'}`}>{projectVerifiedDocuments.length}/{projectRequiredDocuments.length}</p>
+                              <p className="text-[11px] font-semibold text-slate-600">เอกสารทั้งหมด</p>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[11px] font-semibold text-slate-600">Verified {projectDocumentHealthPercent}% / Drive {projectDriveLinkedPercent}%</p>
+                        </div>
+                        <button
+                          type="button"
+                          title={showProjectDocumentControl ? 'ซ่อนการควบคุมเอกสาร' : 'แสดงการควบคุมเอกสาร'}
+                          aria-label={showProjectDocumentControl ? 'ซ่อนการควบคุมเอกสาร' : 'แสดงการควบคุมเอกสาร'}
+                          onClick={() => setShowProjectDocumentControl((current) => !current)}
+                          className={`grid h-8 w-8 place-items-center rounded-md border shadow-sm transition-colors hover:bg-white hover:text-slate-950 ${summaryIconClass(documentSummaryTone)}`}
+                        >
+                          <StageIcon name="file" />
+                        </button>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80">
+                        <div
+                          className={`h-full rounded-full ${currentStageDocumentRiskCount ? 'bg-rose-500' : projectDocumentHealthPercent >= 100 ? 'bg-emerald-500' : projectDocumentHealthPercent > 0 ? 'bg-blue-500' : 'bg-slate-300'}`}
+                          style={{ width: projectDocumentHealthPercent > 0 ? `${projectDocumentHealthPercent}%` : '0%' }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+                    <div className={`relative overflow-hidden rounded-xl border px-4 py-4 shadow-[0_8px_22px_rgba(15,23,42,0.045)] ${summaryCardClass("blue")}`}>
+                      <span className={`pointer-events-none absolute bottom-2 right-8 opacity-[0.06] [&_svg]:h-28 [&_svg]:w-28 ${summaryWatermarkClass("blue")}`}><StageIcon name="activity" /></span>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[13px] font-black text-slate-950">Activity ล่าสุด</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {projectActivities.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setStageHistoryScope('all')}
+                              className="rounded border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-100"
+                            >
+                              ดูทั้งหมด
+                            </button>
+                          )}
+                          <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-500">{projectActivities.length} events</span>
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        {projectLatestActivities.length === 0 ? (
+                          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/60 px-3 py-5 text-center">
+                            <p className="text-[12px] font-black text-slate-500">ยังไม่มีกิจกรรมล่าสุด</p>
+                            <p className="mt-1 text-[11px] font-semibold text-slate-400">กิจกรรมสำคัญของโครงการจะแสดงที่นี่</p>
+                          </div>
+                        ) : projectLatestActivities.map((activity: any, index: number) => {
+                          const view = timelineActivityView(activity);
+                          const auditIcon = activityAuditIcon(activity);
+                          const contextLine = activityContextLine(activity);
+                          const statusBadge = activityStatusBadge(activity);
+                          return (
+                            <div key={`${activity.id}-${index}`} className="grid grid-cols-[34px_minmax(0,1fr)_96px] gap-3 rounded-lg border border-slate-100 bg-white/75 px-2.5 py-2.5">
+                              <div className="relative flex justify-center">
+                                {index < projectLatestActivities.length - 1 && <span className="absolute top-8 h-[calc(100%+8px)] w-px bg-slate-200"></span>}
+                                <span className={`relative z-10 grid h-7 w-7 place-items-center rounded-full border [&_svg]:h-3.5 [&_svg]:w-3.5 ${auditIcon.className}`}>
+                                  <StageIcon name={auditIcon.icon} />
+                                </span>
+                              </div>
+                              <div className="min-w-0 pb-1">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <p className="truncate text-[12px] font-bold text-slate-900">{view.title}</p>
+                                  {statusBadge && (
+                                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold ${statusBadge.className}`}>
+                                      {statusBadge.label}
+                                    </span>
+                                  )}
+                                </div>
+                                {contextLine && <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{contextLine}</p>}
+                                <p className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">{activityActorLine(activity)}</p>
+                              </div>
+                              <div className="text-right text-[10px] font-semibold text-slate-400">
+                                <p>{timelineDateLabel(activity.created_at)}</p>
+                                <p>{timelineTimeLabel(activity.created_at)}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={`relative overflow-hidden rounded-xl border px-4 py-4 shadow-[0_8px_22px_rgba(15,23,42,0.045)] ${summaryCardClass("slate")}`}>
+                      <span className={`pointer-events-none absolute -right-5 -top-4 opacity-[0.07] [&_svg]:h-28 [&_svg]:w-28 ${summaryWatermarkClass("slate")}`}><StageIcon name="info" /></span>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="flex items-center gap-2 text-[13px] font-black text-slate-950"><span className={`grid h-7 w-7 place-items-center rounded-md border [&_svg]:h-3.5 [&_svg]:w-3.5 ${summaryIconClass("slate")}`}><StageIcon name="info" /></span>รายละเอียดโครงการ</p>
+                          <p className="text-[11px] font-semibold text-slate-500">ข้อมูลหลักและสถานะเอกสาร</p>
+                        </div>
+                        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border [&_svg]:h-4 [&_svg]:w-4 ${summaryIconClass("slate")}`}><StageIcon name="file" /></span>
+                      </div>
+
+                      <dl className="mt-4 grid gap-3 text-[12px]">
+                        {[
+                          ['รหัสโครงการ', selectedProject.customer_code],
+                          ['ลูกค้า', selectedProject.customer_name || '-'],
+                          ['ประเภทลูกค้า', selectedProject.project_type || 'RES-S'],
+                          ['กำลังติดตั้ง', `${selectedProjectSystemSize}${String(selectedProjectSystemSize).includes('kW') || selectedProjectSystemSize === '-' ? '' : ' kWp'}`],
+                          ['ประเภทการชำระเงิน', selectedProject.payment_type || 'CASH'],
+                          ['พื้นที่ติดตั้ง', selectedProjectArea],
+                        ].map(([label, value]) => (
+                          <div key={label} className="grid grid-cols-[112px_minmax(0,1fr)] gap-3">
+                            <dt className="font-semibold text-slate-500">{label}</dt>
+                            <dd className="truncate font-bold text-slate-900">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+
+                      <div className="mt-5 rounded-lg border border-slate-200/90 bg-slate-50/70 px-4 py-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-2.5 text-[13px] font-black text-slate-950">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                                <svg className="h-8 w-8 drop-shadow-[0_1px_1px_rgba(15,23,42,0.12)]" viewBox="0 0 87.3 78" aria-hidden="true">
+                                  <path fill="#1A73E8" d="M6.6 66.9 43.7 2.6l12.8 22.1-24.3 42.2z" />
+                                  <path fill="#34A853" d="M32.2 66.9h48.5L68 44.8H19.4z" />
+                                  <path fill="#188038" d="M19.4 44.8 6.6 66.9h25.6z" />
+                                  <path fill="#4285F4" d="M43.7 2.6h25.6l18 31.1H61.7z" />
+                                  <path fill="#FBBC04" d="M61.7 33.7 80.7 66.9 87.3 33.7z" />
+                                  <path fill="#EA4335" d="M43.7 2.6 56.5 24.7h25.6L69.3 2.6z" />
+                                </svg>
+                              </span>
+                              <span>โฟลเดอร์ Google Drive</span>
+                            </p>
+                            <p className={`mt-2 text-[12px] font-bold ${selectedProject.google_drive_folder_id ? 'text-emerald-700' : 'text-amber-700'}`}>
+                              {selectedProject.google_drive_folder_id ? 'เชื่อมต่อแล้ว' : 'ยังไม่สร้าง'}
+                            </p>
+                            {selectedProject.google_drive_folder_id && <p className="mt-1 font-mono text-[10px] font-semibold text-slate-400">ID: {String(selectedProject.google_drive_folder_id).slice(0, 18)}...</p>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const folderId = selectedProject.google_drive_folder_id || await handleSetupDriveFolder();
+                              if (folderId) window.open(`https://drive.google.com/drive/folders/${folderId}`, '_blank');
+                            }}
+                            disabled={creatingDriveFolder}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                          >
+                            {creatingDriveFolder ? 'Creating...' : selectedProject.google_drive_folder_id ? 'Open Drive' : 'Create Drive'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className={`mt-4 rounded-lg border px-4 py-4 ${currentStageDocumentRiskCount || projectOpenExceptions.length ? 'border-rose-100 bg-rose-50/80' : 'border-slate-200/90 bg-slate-50/70'}`}>
+                        <p className="text-[13px] font-black text-slate-950">Risk ที่พบ</p>
+                        <div className="mt-3 space-y-2 text-[12px] font-bold">
+                          {currentStageDocumentRiskCount > 0 && <p className="text-rose-700">เอกสารในขั้นตอนนี้เป็น blocker {currentStageDocumentRiskCount} รายการ</p>}
+                          {currentStageDocumentRiskCount === 0 && projectDocumentRiskCount > 0 && <p className="text-amber-700">มีเอกสารของขั้นตอนถัดไปที่ยังไม่ครบ {projectDocumentRiskCount} รายการ</p>}
+                          {projectOpenExceptions.length > 0 && <p className="text-rose-700">Exception เปิดอยู่ {projectOpenExceptions.length} รายการ</p>}
+                          {projectDocumentRiskCount === 0 && projectOpenExceptions.length === 0 && <p className="text-slate-500">ยังไม่พบ risk สำคัญ</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
               <div className="space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="hidden flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="text-[17px] font-bold text-slate-950">แผนดำเนินงาน</h3>
                       <p className="text-[12px] text-slate-500">ติดตามขั้นตอน หลักฐาน และเวลา SLA</p>
@@ -6128,10 +7097,9 @@ export default function Dashboard() {
                       </button>
                       </div>
                     </div>
-                  </div>
 
                   {nextActionAssistant && (
-                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                       <div className="px-5 py-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -6335,7 +7303,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ) : (
-                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
                         <div>
                           <p className="text-[13px] font-bold text-slate-900">ลำดับขั้นตอน</p>
@@ -6496,6 +7464,7 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+              </div>
           )}
         </div>
       </div>

@@ -135,10 +135,16 @@ export default function AppSidebar({
             key={tab.id}
             onClick={() => onNavigate(tab.id)}
             title={tab.title}
-            className={`${navButtonClass(activeTab === tab.id)} ${isCollapsed ? "justify-center px-0" : ""}`}
+            aria-label={tab.title}
+            className={`group relative ${navButtonClass(activeTab === tab.id)} ${isCollapsed ? "justify-center px-0" : ""}`}
           >
             {tab.icon}
             <span className={`truncate transition-opacity duration-150 ${isCollapsed ? "pointer-events-none hidden opacity-0" : "opacity-100"}`}>{tab.label}</span>
+            {isCollapsed && (
+              <span className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-30 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-lg group-hover:block group-focus-visible:block">
+                {tab.title}
+              </span>
+            )}
           </button>
         ))}
       </nav>
