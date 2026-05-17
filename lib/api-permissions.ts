@@ -18,6 +18,7 @@ type PermissionResult =
       ok: true;
       userId: string | null;
       role: string | null;
+      roles: string[];
       enforced: boolean;
       permissionKey?: string | null;
     }
@@ -37,6 +38,44 @@ function getBearerToken(request: Request) {
   return token;
 }
 
+function normalizeRole(role?: string | null) {
+  return String(role || "").trim();
+}
+
+function activeAdditionalRole(row: any) {
+  if (!row || row.revoked_at) return false;
+  if (!row.expires_at) return true;
+  const expiresAt = new Date(row.expires_at).getTime();
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+}
+
+export async function getEffectiveRoles(
+  supabaseAdmin: SupabaseClientLike,
+  userId: string,
+  primaryRole?: string | null,
+) {
+  const roles = new Set<string>();
+  const normalizedPrimary = normalizeRole(primaryRole);
+  if (normalizedPrimary) roles.add(normalizedPrimary);
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("user_roles")
+      .select("role_id, expires_at, revoked_at")
+      .eq("user_id", userId);
+
+    if (error) return [...roles];
+    for (const row of data || []) {
+      const role = normalizeRole(row.role_id);
+      if (role && activeAdditionalRole(row)) roles.add(role);
+    }
+  } catch {
+    return [...roles];
+  }
+
+  return [...roles];
+}
+
 export async function authorizeRequest(
   supabaseAdmin: SupabaseClientLike,
   request: Request,
@@ -47,7 +86,7 @@ export async function authorizeRequest(
 
   if (!token) {
     if (!strict) {
-      return { ok: true, userId: null, role: null, enforced: false };
+      return { ok: true, userId: null, role: null, roles: [], enforced: false };
     }
 
     return {
@@ -78,18 +117,19 @@ export async function authorizeRequest(
   }
 
   const role = String(profile.role || "");
+  const effectiveRoles = await getEffectiveRoles(supabaseAdmin, userData.user.id, role);
   const permissionKey = routePermissionForRequest(request);
-  let allowed = role === "system_admin" || allowedRoles.includes(role);
+  let allowed = effectiveRoles.includes("system_admin") || effectiveRoles.some((item) => allowedRoles.includes(item));
 
   if (!allowed && permissionKey) {
-    const { data: rolePermission } = await supabaseAdmin
+    const { data: rolePermissions } = await supabaseAdmin
       .from("role_permissions")
       .select("role_code, permission_key, is_allowed")
-      .eq("role_code", role)
+      .in("role_code", effectiveRoles)
       .eq("permission_key", permissionKey)
       .eq("is_allowed", true)
-      .maybeSingle();
-    allowed = Boolean(rolePermission);
+      .limit(1);
+    allowed = Boolean(rolePermissions?.length);
   }
 
   if (!allowed) {
@@ -103,6 +143,7 @@ export async function authorizeRequest(
     ok: true,
     userId: userData.user.id,
     role,
+    roles: effectiveRoles,
     enforced: true,
     permissionKey,
   };

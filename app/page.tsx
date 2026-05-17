@@ -76,7 +76,6 @@ import RejectDocumentModal from "../components/documents/RejectDocumentModal";
 import ExceptionDrawer from "../components/exceptions/ExceptionDrawer";
 import NotificationPanel from "../components/notifications/NotificationPanel";
 import UploadRetryQueue from "../components/field/UploadRetryQueue";
-import ProfileAdminPanel from "../components/settings/ProfileAdminPanel";
 
 function normalizeStageOwnerRole(role?: string | null) {
   const key = String(role || "").toLowerCase();
@@ -5275,7 +5274,7 @@ export default function Dashboard() {
                               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                                 <div>
                                   <h3 className="text-[15px] font-bold text-slate-950">Users & Roles Admin</h3>
-                                  <p className="text-[12px] text-slate-500">หน้าใหม่สำหรับจัดการผู้ใช้งาน บทบาท และ permission ด้วยข้อมูลจริงจาก Supabase</p>
+                                  <p className="text-[12px] text-slate-500">จัดการผู้ใช้งาน บทบาทหลัก และบทบาทเสริมในหน้า canonical เดียว</p>
                                 </div>
                                 <a
                                   href="/admin/users"
@@ -5285,15 +5284,6 @@ export default function Dashboard() {
                                 </a>
                               </div>
                             </div>
-                            <ProfileAdminPanel
-                              users={profileUsers}
-                              roles={profileRoles}
-                              loadingId={profileLoadingId}
-                              onRefresh={() => { fetchProfileUsers(); fetchProfileRoles(); }}
-                              onBootstrap={handleBootstrapAdminProfile}
-                              onCreateUser={handleCreateProfileUser}
-                              onSave={handleSaveProfileUser}
-                            />
                           </div>
                         )}
                         {adminSettingsTab === 'audit' && (

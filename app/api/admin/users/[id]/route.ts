@@ -30,6 +30,84 @@ async function getAssignableRole(roleCode: string) {
   return data;
 }
 
+function normalizeRoleList(input: unknown) {
+  if (!Array.isArray(input)) return null;
+  return [...new Set(input.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+async function validateAssignableRoles(roleCodes: string[], actorRoles: string[]) {
+  for (const roleCode of roleCodes) {
+    const targetRole = await getAssignableRole(roleCode);
+    if (!targetRole || targetRole.is_active === false) {
+      return `Unsupported role for assignment: ${roleCode}`;
+    }
+    if (roleCode === "system_admin" && !actorRoles.includes("system_admin")) {
+      return "Only system_admin can assign system_admin.";
+    }
+  }
+  return null;
+}
+
+async function activeAdditionalRoles(userId: string) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("user_roles")
+      .select("id, user_id, role_id, assigned_by, assigned_at, expires_at, reason, revoked_at")
+      .eq("user_id", userId);
+    if (error) return [];
+    const now = Date.now();
+    return (data || []).filter((row: any) => {
+      if (row.revoked_at) return false;
+      if (!row.expires_at) return true;
+      const expiresAt = new Date(row.expires_at).getTime();
+      return Number.isFinite(expiresAt) && expiresAt > now;
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function syncAdditionalRoles(userId: string, targetRoles: string[], actorId: string | null, reason?: string | null, expiresAt?: string | null) {
+  const beforeRows = await activeAdditionalRoles(userId);
+  const beforeRoles = new Set(beforeRows.map((row: any) => String(row.role_id)));
+  const target = new Set(targetRoles);
+  const now = new Date().toISOString();
+
+  const toAdd = [...target].filter((role) => !beforeRoles.has(role));
+  const toKeep = [...target].filter((role) => beforeRoles.has(role));
+  const toRemove = [...beforeRoles].filter((role) => !target.has(role));
+
+  if (toAdd.length || toKeep.length) {
+    await supabaseAdmin.from("user_roles").upsert(
+      [...toAdd, ...toKeep].map((roleCode) => ({
+        user_id: userId,
+        role_id: roleCode,
+        assigned_by: actorId,
+        assigned_at: beforeRoles.has(roleCode) ? beforeRows.find((row: any) => row.role_id === roleCode)?.assigned_at || now : now,
+        expires_at: expiresAt || null,
+        reason: reason || null,
+        revoked_at: null,
+      })),
+      { onConflict: "user_id,role_id" },
+    );
+  }
+
+  if (toRemove.length) {
+    await supabaseAdmin
+      .from("user_roles")
+      .update({ revoked_at: now, reason: reason || null })
+      .eq("user_id", userId)
+      .in("role_id", toRemove);
+  }
+
+  return {
+    before: [...beforeRoles],
+    after: [...target],
+    added: toAdd,
+    removed: toRemove,
+  };
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -41,6 +119,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
     const role = String(body.role || "").trim();
+    const additionalRoles = normalizeRoleList(body.additionalRoles);
 
     if (role) {
       const targetRole = await getAssignableRole(role);
@@ -49,11 +128,20 @@ export async function PATCH(
       }
     }
 
-    if (role === "system_admin" && permission.role !== "system_admin") {
+    if (role === "system_admin" && !permission.roles.includes("system_admin")) {
       return NextResponse.json(
         { error: "เฉพาะ system_admin เท่านั้นที่สามารถมอบสิทธิ์ system_admin ให้ผู้อื่นได้" },
         { status: 403 },
       );
+    }
+
+    if (additionalRoles) {
+      const duplicatesPrimary = additionalRoles.filter((item) => item === (role || body.primaryRole || ""));
+      if (duplicatesPrimary.length) {
+        return NextResponse.json({ error: "Additional roles should not duplicate the primary role." }, { status: 400 });
+      }
+      const validationError = await validateAssignableRoles(additionalRoles, permission.roles);
+      if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
     const { data: beforeProfile, error: beforeError } = await supabaseAdmin
@@ -90,17 +178,34 @@ export async function PATCH(
 
     if (error) throw error;
 
+    let roleChange: any = null;
+    if (additionalRoles) {
+      const normalizedAdditionalRoles = additionalRoles.filter((item) => item !== profile.role);
+      roleChange = await syncAdditionalRoles(
+        id,
+        normalizedAdditionalRoles,
+        permission.userId,
+        String(body.reason || "").trim() || null,
+        body.expiresAt || null,
+      );
+    }
+
     await supabaseAdmin.from("activity_logs").insert({
       actor_id: permission.userId,
-      action: "ADMIN_USER_UPDATED",
+      action: roleChange ? "ADMIN_USER_ROLES_UPDATED" : "ADMIN_USER_UPDATED",
       before_state: beforeProfile,
       after_state: profile,
       related_entity_type: "profiles",
       related_entity_id: id,
-      metadata: { source: "admin_users_page" },
+      metadata: {
+        source: "admin_users_page",
+        role_change: roleChange,
+        reason: String(body.reason || "").trim() || null,
+        primary_role_changed: beforeProfile.role !== profile.role,
+      },
     });
 
-    return NextResponse.json({ profile });
+    return NextResponse.json({ profile, roleChange });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Admin user update API Error:", message);
@@ -115,7 +220,7 @@ export async function DELETE(
   try {
     const permission = await requireAdmin(request);
     if (!permission.ok) return permission.response;
-    if (permission.role !== "system_admin") {
+    if (!permission.roles.includes("system_admin")) {
       return NextResponse.json({ error: "System admin session is required to delete users." }, { status: 403 });
     }
 

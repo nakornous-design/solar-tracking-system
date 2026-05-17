@@ -32,6 +32,40 @@ async function getAssignableRole(roleCode: string) {
   return data;
 }
 
+function activeAdditionalRole(row: any) {
+  if (!row || row.revoked_at) return false;
+  if (!row.expires_at) return true;
+  const expiresAt = new Date(row.expires_at).getTime();
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+}
+
+async function fetchAdditionalRoles(userIds: string[]) {
+  if (!userIds.length) return new Map<string, any[]>();
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("user_roles")
+      .select("id, user_id, role_id, assigned_by, assigned_at, expires_at, reason, revoked_at")
+      .in("user_id", userIds);
+    if (error) return new Map<string, any[]>();
+    return (data || []).reduce((acc: Map<string, any[]>, row: any) => {
+      if (!activeAdditionalRole(row)) return acc;
+      const list = acc.get(row.user_id) || [];
+      list.push({
+        id: row.id,
+        role: row.role_id,
+        assignedBy: row.assigned_by,
+        assignedAt: row.assigned_at,
+        expiresAt: row.expires_at,
+        reason: row.reason,
+      });
+      acc.set(row.user_id, list);
+      return acc;
+    }, new Map<string, any[]>());
+  } catch {
+    return new Map<string, any[]>();
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const permission = await requireAdmin(request);
@@ -49,13 +83,17 @@ export async function GET(request: Request) {
     if (profileError) throw profileError;
 
     const profilesById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+    const additionalRolesByUserId = await fetchAdditionalRoles((authUsers.users || []).map((user) => user.id));
     const users = (authUsers.users || []).map((user) => {
       const profile: any = profilesById.get(user.id) || {};
+      const additionalRoles = additionalRolesByUserId.get(user.id) || [];
       return {
         id: user.id,
         email: user.email || profile.email || null,
         fullName: profile.full_name || user.user_metadata?.full_name || "",
         role: profile.role || user.user_metadata?.role || "ops",
+        additionalRoles,
+        effectiveRoles: [...new Set([profile.role || user.user_metadata?.role || "ops", ...additionalRoles.map((item) => item.role)].filter(Boolean))],
         isActive: profile.is_active !== false,
         teamDepartment: profile.team_department || "",
         notes: profile.notes || "",
@@ -69,6 +107,7 @@ export async function GET(request: Request) {
       currentUser: {
         id: permission.userId,
         role: permission.role,
+        roles: permission.roles,
       },
       users,
     });
@@ -98,7 +137,7 @@ export async function POST(request: Request) {
     if (!targetRole || targetRole.is_active === false) {
       return NextResponse.json({ error: "Unsupported role for profile assignment." }, { status: 400 });
     }
-    if (role === "system_admin" && permission.role !== "system_admin") {
+    if (role === "system_admin" && !permission.roles.includes("system_admin")) {
       return NextResponse.json(
         { error: "เฉพาะ system_admin เท่านั้นที่สามารถมอบสิทธิ์ system_admin ให้ผู้อื่นได้" },
         { status: 403 },
@@ -136,6 +175,39 @@ export async function POST(request: Request) {
 
     if (profileError) throw profileError;
 
+    const additionalRoles: string[] = Array.isArray(body.additionalRoles)
+      ? Array.from(new Set<string>(body.additionalRoles
+        .map((item: unknown) => String(item || "").trim())
+        .filter((item: string): item is string => Boolean(item))))
+      : [];
+    const invalidAdditionalRoles = additionalRoles.filter((item) => item === role);
+    if (invalidAdditionalRoles.length) {
+      return NextResponse.json({ error: "Additional roles should not duplicate the primary role." }, { status: 400 });
+    }
+    for (const additionalRole of additionalRoles) {
+      const targetRole = await getAssignableRole(additionalRole);
+      if (!targetRole || targetRole.is_active === false) {
+        return NextResponse.json({ error: `Unsupported additional role: ${additionalRole}` }, { status: 400 });
+      }
+      if (additionalRole === "system_admin" && !permission.roles.includes("system_admin")) {
+        return NextResponse.json({ error: "Only system_admin can assign system_admin." }, { status: 403 });
+      }
+    }
+    if (additionalRoles.length) {
+      await supabaseAdmin.from("user_roles").upsert(
+        additionalRoles.map((additionalRole) => ({
+          user_id: user.id,
+          role_id: additionalRole,
+          assigned_by: permission.userId,
+          assigned_at: new Date().toISOString(),
+          expires_at: body.expiresAt || null,
+          reason: body.reason || null,
+          revoked_at: null,
+        })),
+        { onConflict: "user_id,role_id" },
+      );
+    }
+
     await supabaseAdmin.from("activity_logs").insert({
       actor_id: permission.userId,
       action: "ADMIN_USER_CREATED",
@@ -154,6 +226,8 @@ export async function POST(request: Request) {
         email: user.email || email,
         fullName: profile.full_name || "",
         role: profile.role,
+        additionalRoles: additionalRoles.map((roleCode) => ({ role: roleCode })),
+        effectiveRoles: [...new Set([profile.role, ...additionalRoles].filter(Boolean))],
         isActive: profile.is_active !== false,
         teamDepartment: profile.team_department || "",
         notes: profile.notes || "",

@@ -113,6 +113,49 @@ test("transitionStageForward blocks incomplete hard gates and creates workflow e
   assert.equal(db.notifications[0].severity, "HIGH");
 });
 
+test("transitionStageForward accepts matching additional actor role", async () => {
+  const db = {
+    projects: [{ id: "project-1", status: "IN_PROGRESS", current_stage_id: "stage-lead", sla_status: "ON_TRACK" }],
+    project_stages: [
+      {
+        id: "stage-lead",
+        project_id: "project-1",
+        workflow_stage_id: "wf-lead",
+        order_index: 1,
+        name: "Lead",
+        owner_role: "sales",
+        status: "IN_PROGRESS",
+        workflow_stages: { workflow_version_id: "version-1" },
+      },
+      {
+        id: "stage-survey",
+        project_id: "project-1",
+        workflow_stage_id: "wf-survey",
+        order_index: 2,
+        name: "Survey",
+        owner_role: "ops",
+        status: "PENDING",
+        workflow_stages: { sla_hours: 72 },
+      },
+    ],
+    workflow_transitions: [
+      { id: "transition-1", workflow_version_id: "version-1", from_stage_id: "wf-lead", to_stage_id: "wf-survey", type: "FORWARD", is_active: true },
+    ],
+    project_checklists: [],
+    project_documents: [],
+    approval_requests: [],
+    project_exceptions: [],
+    activity_logs: [],
+    notifications: [],
+    notification_deliveries: [],
+  };
+
+  const result = await transitionStageForward(fakeSupabase(db), "project-1", "stage-lead", "user-1", ["ops", "sales"]);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.completedStageId, "stage-lead");
+});
+
 test("transitionStageForward closes terminal Closure stage without a forward transition", async () => {
   const db = {
     projects: [{ id: "project-1", status: "IN_PROGRESS", current_stage_id: "stage-closure", sla_status: "ON_TRACK" }],

@@ -41,11 +41,17 @@ function normalizeStageOwnerRole(role?: string | null) {
   return aliases[key] || key;
 }
 
-function ownerRoleError(currentStage: any, actorRole?: string | null) {
-  if (!actorRole || actorRole === "admin" || actorRole === "supervisor" || actorRole === "sbc") return null;
+function ownerRoleError(currentStage: any, actorRole?: string | string[] | null) {
+  const actorRoles = (Array.isArray(actorRole) ? actorRole : [actorRole])
+    .map((role) => normalizeStageOwnerRole(role))
+    .filter(Boolean);
+  if (
+    actorRoles.length === 0 ||
+    actorRoles.some((role) => ["system_admin", "admin", "supervisor", "sbc"].includes(role))
+  ) return null;
 
   const ownerRole = normalizeStageOwnerRole(currentStage?.owner_role);
-  if (!ownerRole || ownerRole === normalizeStageOwnerRole(actorRole)) return null;
+  if (!ownerRole || actorRoles.includes(ownerRole)) return null;
 
   return `Only the ${currentStage.owner_role || "stage owner"} role can complete this stage.`;
 }
@@ -160,7 +166,7 @@ export async function transitionStageForward(
   projectId: string,
   projectStageId: string,
   actorUserId?: string | null,
-  actorRole?: string | null,
+  actorRole?: string | string[] | null,
 ): Promise<TransitionResult> {
   const { data: currentStage, error: currentStageError } = await supabase
     .from("project_stages")

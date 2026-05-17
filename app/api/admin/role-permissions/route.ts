@@ -63,7 +63,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "system_admin permissions are locked." }, { status: 400 });
     }
 
-    if (permission.role !== "system_admin" && isDangerPermission(permissionKey)) {
+    if (!permission.roles.includes("system_admin") && isDangerPermission(permissionKey)) {
       return NextResponse.json(
         { error: "Normal admin cannot grant danger zone permissions." },
         { status: 403 },

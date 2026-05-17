@@ -37,7 +37,7 @@ export async function DELETE(
   try {
     const permission = await authorizeRequest(supabaseAdmin, request, ["system_admin"]);
     if (!permission.ok) return permission.response;
-    if (!permission.enforced || permission.role !== "system_admin") {
+    if (!permission.enforced || !permission.roles.includes("system_admin")) {
       return NextResponse.json({ error: "System admin session is required." }, { status: 403 });
     }
 

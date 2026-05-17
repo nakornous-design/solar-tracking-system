@@ -49,6 +49,7 @@ test("authorizeRequest allows local advisory mode without a token", async () => 
     assert.equal(result.ok, true);
     assert.equal(result.userId, null);
     assert.equal(result.role, null);
+    assert.deepEqual(result.roles, []);
     assert.equal(result.enforced, false);
   });
 });
@@ -77,6 +78,29 @@ test("authorizeRequest accepts active profiles with allowed roles", async () => 
     assert.equal(result.ok, true);
     assert.equal(result.userId, "user-1");
     assert.equal(result.role, "ops");
+    assert.deepEqual(result.roles, ["ops"]);
+    assert.equal(result.enforced, true);
+  });
+});
+
+test("authorizeRequest accepts active additional roles", async () => {
+  await withAuthEnv({ AUTH_ENFORCEMENT: "strict" }, async () => {
+    const result = await authorizeRequest(
+      permissionClient(
+        {
+          profiles: [{ id: "user-1", role: "system_admin", is_active: true }],
+          user_roles: [{ user_id: "user-1", role_id: "sales", revoked_at: null, expires_at: null }],
+        },
+        { "token-1": { id: "user-1" } },
+      ),
+      requestWithToken("token-1"),
+      ["sales"],
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.userId, "user-1");
+    assert.equal(result.role, "system_admin");
+    assert.deepEqual(result.roles, ["system_admin", "sales"]);
     assert.equal(result.enforced, true);
   });
 });

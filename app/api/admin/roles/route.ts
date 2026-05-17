@@ -47,8 +47,27 @@ export async function GET(request: Request) {
       return acc;
     }, {});
 
+    try {
+      const { data: additionalRoles } = await supabaseAdmin
+        .from("user_roles")
+        .select("role_id, revoked_at, expires_at, profiles!inner(is_active)")
+        .is("revoked_at", null);
+      const now = Date.now();
+      for (const row of additionalRoles || []) {
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        if (profile?.is_active === false) continue;
+        if (row.expires_at) {
+          const expiresAt = new Date(row.expires_at).getTime();
+          if (!Number.isFinite(expiresAt) || expiresAt <= now) continue;
+        }
+        activeCounts[row.role_id] = (activeCounts[row.role_id] || 0) + 1;
+      }
+    } catch {
+      // Older deployments without user_roles still count primary roles safely.
+    }
+
     return NextResponse.json({
-      currentUser: { id: permission.userId, role: permission.role },
+      currentUser: { id: permission.userId, role: permission.role, roles: permission.roles },
       roles: (roles || []).map((role: any) => ({
         ...role,
         users_count: activeCounts[role.role_code] || 0,

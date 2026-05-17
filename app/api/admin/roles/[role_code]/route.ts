@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeRequest } from "@/lib/api-permissions";
+import { PERMISSION_DEFINITIONS } from "@/lib/permissions";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +18,99 @@ async function requireAdmin(request: Request) {
     };
   }
   return permission;
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const candidate = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    return [candidate.message, candidate.details, candidate.hint, candidate.code].filter(Boolean).join(" | ") || JSON.stringify(error);
+  }
+  return String(error || "Unknown error");
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ role_code: string }> },
+) {
+  try {
+    const permission = await requireAdmin(request);
+    if (!permission.ok) return permission.response;
+
+    const { role_code: roleCode } = await params;
+
+    const [
+      { data: role, error: roleError },
+      { data: rolePermissions, error: permissionsError },
+      { data: stageOwnership, error: stagesError },
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("roles")
+        .select("role_code, role_name, role_group, description, is_system_role, is_active")
+        .eq("role_code", roleCode)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("role_permissions")
+        .select("permission_key, is_allowed")
+        .eq("role_code", roleCode)
+        .eq("is_allowed", true)
+        .order("permission_key", { ascending: true }),
+      supabaseAdmin
+        .from("workflow_stages")
+        .select("id, workflow_version_id, code, name, order_index, owner_role, is_active")
+        .eq("owner_role", roleCode)
+        .eq("is_active", true)
+        .order("order_index", { ascending: true }),
+    ]);
+
+    if (roleError) throw roleError;
+    if (!role) return NextResponse.json({ error: "Role was not found." }, { status: 404 });
+    if (permissionsError) throw permissionsError;
+    if (stagesError) throw stagesError;
+
+    const workflowVersionIds = Array.from(new Set((stageOwnership || []).map((stage: any) => stage.workflow_version_id).filter(Boolean)));
+    let workflowVersionById = new Map<string, any>();
+    if (workflowVersionIds.length > 0) {
+      const { data: workflowVersions, error: workflowVersionsError } = await supabaseAdmin
+        .from("workflow_versions")
+        .select("id, code, name, status")
+        .in("id", workflowVersionIds);
+      if (workflowVersionsError) {
+        const { data: fallbackVersions, error: fallbackError } = await supabaseAdmin
+          .from("workflow_versions")
+          .select("id, name, status")
+          .in("id", workflowVersionIds);
+        if (fallbackError) throw fallbackError;
+        workflowVersionById = new Map((fallbackVersions || []).map((version: any) => [version.id, version]));
+      } else {
+        workflowVersionById = new Map((workflowVersions || []).map((version: any) => [version.id, version]));
+      }
+    }
+
+    const allowedKeys = new Set((rolePermissions || []).map((item: any) => item.permission_key));
+    const permissions = PERMISSION_DEFINITIONS.map((definition) => ({
+      ...definition,
+      is_allowed: allowedKeys.has(definition.key) || roleCode === "system_admin",
+    }));
+
+    return NextResponse.json({
+      role,
+      permissions,
+      stageOwnership: (stageOwnership || []).map((stage: any) => ({
+        id: stage.id,
+        code: stage.code,
+        name: stage.name,
+        orderIndex: stage.order_index,
+        workflowCode: workflowVersionById.get(stage.workflow_version_id)?.code || null,
+        workflowName: workflowVersionById.get(stage.workflow_version_id)?.name || null,
+        workflowStatus: workflowVersionById.get(stage.workflow_version_id)?.status || null,
+      })),
+    });
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    console.error("Admin role detail API Error:", message);
+    return NextResponse.json({ error: `Fetch role detail failed: ${message}` }, { status: 500 });
+  }
 }
 
 export async function PATCH(

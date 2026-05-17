@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "Only FORWARD transitions are implemented in this MVP step." }, { status: 400 });
     }
 
-    const result = await transitionStageForward(supabaseAdmin, projectId, projectStageId, permission.userId, permission.role);
+    const result = await transitionStageForward(supabaseAdmin, projectId, projectStageId, permission.userId, permission.roles);
 
     if (!result.ok) {
       return NextResponse.json(result, { status: result.status });
